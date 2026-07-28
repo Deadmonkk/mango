@@ -1,0 +1,52 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # This pack is an overlay, not a standalone package: it imports TerminalQ's
+      # cache, config, logging and base providers. So CI reconstructs a real
+      # install — check out upstream, drop this pack on top, run the suite.
+      - name: Check out this extension pack
+        uses: actions/checkout@v4
+        with:
+          path: extensions
+
+      - name: Check out TerminalQ (the host project)
+        uses: actions/checkout@v4
+        with:
+          repository: fakoli/terminalq
+          path: terminalq
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Overlay the extension pack onto TerminalQ
+        run: |
+          cp -r extensions/src/terminalq/* terminalq/src/terminalq/
+          cp -r extensions/tests/* terminalq/tests/
+          cp -r extensions/scripts terminalq/
+
+      - name: Install dependencies
+        working-directory: terminalq
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pandas pytest pytest-asyncio
+
+      # Only this pack's tests. Upstream's own suite is its business, and its
+      # plugin-layout contract tests assert things this overlay deliberately
+      # does not ship (new providers are not registered in server.py here).
+      - name: Run the extension pack's tests
+        working-directory: terminalq
+        run: |
+          FILES=$(cd ../extensions/tests && ls test_*.py | sed 's|^|tests/|' | tr '\n' ' ')
+          python -m pytest $FILES -q

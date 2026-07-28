@@ -160,7 +160,7 @@ def render_table(rows: list[dict], period: str, flow: float | None) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Compute ADV from OHLCV for forced-flow sizing.")
     parser.add_argument("symbols", nargs="*", help="Ticker symbols (omit with --watchlist)")
-    parser.add_argument("--watchlist", action="store_true", help=f"Use the Niche-Explorer watchlist: {', '.join(WATCHLIST)}")
+    parser.add_argument("--watchlist", action="store_true", help=f"Use the configured watchlist: {', '.join(WATCHLIST)}")
     parser.add_argument("--period", default=DEFAULT_PERIOD, help="Lookback: 1mo, 3mo, 6mo, 1y, 2y, 5y, max (default 3mo)")
     parser.add_argument("--interval", default="1d", help="Bar interval (default 1d)")
     parser.add_argument("--flow", type=float, help="Dollar flow to size against ADV, e.g. 1.0e9")

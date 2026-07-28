@@ -4,8 +4,32 @@ An extension pack of market-data providers, analytics modules, and workflow comm
 for [TerminalQ](https://github.com/fakoli/terminalq), a Bloomberg-style financial
 terminal that runs as a Claude Code plugin.
 
-**28 modules, 36 test files, ~9,400 lines.** Every data source added here is free and
+**32 modules, 36 test files, ~9,400 lines.** Every data source added here is free and
 most require no API key at all.
+
+## About this project
+
+I'm an undergraduate studying finance and business analytics, and I built this to
+answer a question I kept running into: how much of an institutional market-data setup
+can you reconstruct from public sources, for nothing?
+
+That framing matters for how you should read the code. **I'm not a professional
+software engineer, and this isn't production infrastructure.** It's a working tool I
+use for my own market research, built while learning. Some of the choices here are
+deliberate tradeoffs I can defend; others are probably just things I didn't know a
+better way to do yet, and I'd genuinely like to be told which is which.
+
+Things I already know are rough, so you don't have to hunt for them:
+
+- The HTML scrapers parse tables with regex rather than a real parser. That avoids a
+  dependency for what is simple table extraction, and every caller fails soft — but
+  it's the classic thing to flag, and I'd rather name it than have it found.
+- Four of the test files exercise TerminalQ's own modules rather than mine, so they
+  won't run against this repo alone (see [Testing](#testing)).
+- `_html.py` is the one module with no direct test coverage.
+
+**Issues and PRs are welcome, including blunt ones.** If something here is wrong or
+naive, I'd rather hear it than keep shipping it.
 
 ---
 
@@ -60,7 +84,10 @@ unfalsifiable, so this makes it falsifiable by construction:
 
 - **`history.py`** — append-only local store of dated regime snapshots and logged predictions.
 - **`prediction_grader.py`** — settles each prediction automatically once its horizon
-  elapses, by comparing against realized prices. No opportunity to quietly forget a bad call.
+  elapses, by comparing against realized prices. No opportunity to quietly forget a bad
+  call. Each call settles on the close at its **due date**, not on whatever day grading
+  happens to run — grading is lazy, so pricing at run-time would silently turn a 30-day
+  call into a 45-day one and record a horizon nobody predicted.
 - **`regime_history.py`** — measures realized forward returns grouped by what the model
   scored at the time, which is what tells you whether the scoring weights actually predict
   anything or just feel plausible.
@@ -78,6 +105,73 @@ unfalsifiable, so this makes it falsifiable by construction:
 - **`voice.py`** — spoken briefings through the macOS `say` command.
 
 ---
+
+## How it fits together
+
+```mermaid
+flowchart LR
+    subgraph SRC["Public sources — free, mostly keyless"]
+        A1["NASA POWER<br/>CFTC · FRED"]
+        A2["mempool.space<br/>Hyperliquid · DefiLlama"]
+        A3["Scraped tables<br/>AAII · Farside · multpl"]
+    end
+
+    subgraph PROV["Providers (21)"]
+        P["fail soft<br/>+ fallback on outage"]
+    end
+
+    subgraph ANA["Analytics (7)"]
+        N1["percentiles<br/>where does this sit vs its own history?"]
+        N2["correlation regime<br/>is diversification failing?"]
+        N3["stress backtest<br/>what happened last time?"]
+    end
+
+    subgraph LED["Prediction ledger"]
+        L1["log dated call"]
+        L2["settle on DUE date"]
+        L3["accuracy by regime score"]
+    end
+
+    SRC --> PROV --> ANA --> LED
+    L1 --> L2 --> L3
+```
+
+The left-to-right path is the whole idea: pull a number from a free source, place it in
+its own historical distribution so it means something, then commit to a dated call and
+grade it later whether it worked or not.
+
+## What the output looks like
+
+`scripts/adv.py` computes average daily volume straight from OHLCV bars, so a claim
+about a large flow can be sized against real liquidity instead of an aggregator's
+figure. Actual output, run against three large caps:
+
+```
+$ python scripts/adv.py AAPL MSFT NVDA --flow 1.0e9
+
+TKR       $ADV mean   $ADV MEDIAN     $ADV 20d   sh ADV med   spiky
+-------------------------------------------------------------------
+AAPL    $16,716.97M   $15,016.29M  $15,979.70M   48,535,150    5.4x
+MSFT    $15,605.59M   $13,429.72M  $12,468.76M   33,034,250    5.6x
+NVDA    $32,125.79M   $30,518.71M  $26,385.34M  148,628,350    1.9x
+
+window: 3mo — 62 bars, 2026-04-29 to 2026-07-28
+
+Sizing $1,000M of flow against MEDIAN $ADV (the conservative read):
+  AAPL       0.1x ADV  =     0.1 days of volume
+  MSFT       0.1x ADV  =     0.1 days of volume
+  NVDA       0.0x ADV  =     0.0 days of volume
+
+Prefer the MEDIAN for sizing — the mean is inflated by rebalance/earnings prints.
+Spiky names (>3x) disrupt more than days-of-volume implies: the flow day is not this average day.
+Yahoo consolidated tape (incl. off-exchange prints); order-of-magnitude, not a filing.
+```
+
+Two things that output is deliberately doing. It reports the **median alongside the
+mean**, because rebalance and earnings days produce volume prints many times a normal
+day and drag the mean above what the stock actually absorbs — AAPL's spikiness of 5.4x
+says its busiest day was over five times its median one. And it **restates its own
+caveats every run**, so a number can't get quoted later without the limits attached.
 
 ## Installation
 
@@ -111,12 +205,26 @@ dependencies except `pandas`.
 
 ## Testing
 
-36 test files cover the modules above. Network calls are mocked, so the suite runs
-offline and deterministically.
+36 test files, **319 tests, all passing** against a TerminalQ checkout with this pack
+overlaid. Network calls are mocked throughout, so the suite runs offline and
+deterministically — no API keys or live endpoints needed.
 
 ```bash
 uv run pytest tests/
 ```
+
+Two caveats worth stating plainly:
+
+- **Four test files exercise TerminalQ's own modules**, not mine —
+  `test_coingecko.py`, `test_metric_context.py`, `test_release_calendar.py`, and
+  `test_trending_fallback.py` target upstream's `coingecko`, `fred`, and `finnhub`
+  providers. I wrote those tests, but they cover upstream code, so the honest count
+  of tests covering *this pack* is 32 files.
+- **`_html.py` has no direct test.** It's small, but it's the shared parsing helper
+  behind four scraped providers, so it's the least-covered thing that matters most.
+
+CI runs the suite on every push by checking out TerminalQ, overlaying this pack, and
+running pytest — see [`.github/workflows/tests.yml`](.github/workflows/tests.yml).
 
 ---
 

@@ -72,7 +72,9 @@ def record_snapshot(snapshot_date: str | None = None, **metrics) -> dict:
     """Append one FR snapshot. Only non-None metrics are stored.
 
     Args:
-        snapshot_date: ISO date (YYYY-MM-DD). Defaults to today (UTC).
+        snapshot_date: ISO date (YYYY-MM-DD). Defaults to today's LOCAL date,
+            which is what the daily report is keyed on. Note ``recorded_at``
+            is UTC — the two can straddle midnight in either direction.
         **metrics: Any of SNAPSHOT_METRIC_KEYS plus arbitrary extras.
 
     Returns:
