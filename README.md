@@ -1,5 +1,9 @@
 # terminalq-extensions
 
+[![tests](https://github.com/Deadmonkk/terminalq-extensions/actions/workflows/tests.yml/badge.svg)](https://github.com/Deadmonkk/terminalq-extensions/actions/workflows/tests.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
+
 An extension pack of market-data providers, analytics modules, and workflow commands
 for [TerminalQ](https://github.com/fakoli/terminalq), a Bloomberg-style financial
 terminal that runs as a Claude Code plugin.
