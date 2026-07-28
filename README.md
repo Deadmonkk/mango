@@ -23,11 +23,35 @@ data. Exchanges publish prices. The Fed publishes its own calendar. NASA publish
 weather data you can use to watch crop-growing regions. None of it costs anything if
 you're willing to write the code to go and get it.
 
-**A note on what this is.** I'm studying finance and business analytics, not computer
-science. This is a tool I actually use for my own market research, and I built it
-while learning to code properly. Some of the decisions here I can explain and defend.
-Others are probably just me not knowing a better way yet. I'd honestly like to know
-which is which, so if you spot something wrong, please tell me.
+## How this was built, and what it taught me
+
+**I built this with Claude Code, and AI generated a large share of the code here.**
+I decided what to build, reviewed what came back, and own every decision in it,
+including the ones that turned out to be wrong. I'm stating that plainly at the top
+rather than burying it, because the most useful thing I learned on this project came
+directly from working that way.
+
+It ran perfectly on my laptop. So I published it, wired up automated testing, and the
+tests failed on the very first run.
+
+57 configuration values existed only on my machine, in a file I had never shared. The
+code worked flawlessly for me and would have failed for every other person on earth.
+The install instructions I had confidently written could not have worked for anyone.
+
+Neither I nor the AI caught it. We were both looking at my computer, where everything
+was already in place. It took a clean machine that had never seen my setup to expose
+the problem.
+
+That is the part I'd want someone to take from this repo. AI can produce a lot of
+working code very quickly, and "working" quietly means "working here." Verification is
+the piece you cannot hand off, because the model is reading the same environment you
+are and inherits the same blind spot. The tests are what caught it, which is why
+there are 166 of them and why they run on a clean machine on every change.
+
+I'm studying finance and business analytics, not computer science. Some of the
+decisions here I can explain and defend. Others are probably just me not knowing a
+better way yet. I'd genuinely like to know which is which, so if you spot something
+wrong, please tell me.
 
 A few things I already know could be better, so you don't have to go looking:
 
