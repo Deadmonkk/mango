@@ -1,0 +1,32 @@
+# Tooling config only.
+#
+# This repository is an extension pack that overlays onto a TerminalQ checkout
+# (see README), not an independently installable distribution. The dependencies
+# below are recorded so the requirements are explicit and the test suite can be
+# run in isolation.
+
+[project]
+name = "terminalq-extensions"
+version = "0.1.0"
+description = "Free-data market providers, historical-context analytics, and a self-grading prediction ledger for TerminalQ"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27.0",
+    "pandas>=2.0.0",
+    "yfinance>=0.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.6.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
