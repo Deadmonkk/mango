@@ -12,9 +12,6 @@ import re
 import statistics
 
 import httpx
-
-from terminalq import cache
-from terminalq._lazy_yfinance import yfinance
 from terminalq.config import (
     AAII_SPREAD_EXTREME_PP,
     CACHE_TTL_RETAIL_SENTIMENT,
@@ -22,6 +19,9 @@ from terminalq.config import (
     PUT_CALL_FEAR_RATIO,
 )
 from terminalq.logging_config import log
+
+from terminalq import cache
+from terminalq._lazy_yfinance import yfinance
 from terminalq.providers import _html
 
 AAII_URL = "https://www.aaii.com/sentimentsurvey/sent_results"

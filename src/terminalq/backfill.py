@@ -98,9 +98,7 @@ def backfill(reports_dir: Path) -> list[dict]:
 
 
 if __name__ == "__main__":
-    default_dir = Path(
-        os.getenv("TERMINALQ_REPORTS_DIR", str(Path.home() / "market-reports"))
-    )
+    default_dir = Path(os.getenv("TERMINALQ_REPORTS_DIR", str(Path.home() / "market-reports")))
     directory = Path(sys.argv[1]) if len(sys.argv) > 1 else default_dir
     rows = backfill(directory)
     print(f"Backfilled {len(rows)} report(s) into the snapshot store.")

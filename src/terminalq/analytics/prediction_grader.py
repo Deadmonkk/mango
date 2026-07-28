@@ -15,8 +15,9 @@ accuracy record measure a horizon nobody predicted.
 
 from datetime import date, datetime
 
-from terminalq.history import load_predictions, update_prediction
 from terminalq.logging_config import log
+
+from terminalq.history import load_predictions, update_prediction
 from terminalq.providers import historical
 
 # A prediction must settle on the price at its DUE date, not at whatever date
@@ -51,9 +52,7 @@ async def _close_on_or_before(symbol: str, due: date) -> tuple[float | None, str
         return None, None
 
     due_iso = due.isoformat()
-    on_or_before = [
-        p for p in result.get("prices", []) if p.get("close") and p.get("date", "") <= due_iso
-    ]
+    on_or_before = [p for p in result.get("prices", []) if p.get("close") and p.get("date", "") <= due_iso]
     if not on_or_before:
         return None, None
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-adv.py — average-daily-volume helper for the forced-flow lens.
+adv.py — average-daily-volume helper for sizing flow against liquidity.
 
 WHY THIS EXISTS
 ---------------
@@ -44,7 +44,8 @@ CAVEATS THE OUTPUT REPEATS (do not strip them)
     is not the calm tape this average was computed from, so days-of-volume
     understates real disruption on spiky names.
   * On a source failure the row reads "data unavailable (source failed)" —
-    never a stale or interpolated number (Factual Integrity rule).
+    never a stale or interpolated number: a missing figure is reported as
+    missing rather than filled in.
 """
 
 import argparse
@@ -60,11 +61,7 @@ from terminalq.providers.historical import get_historical
 # to your own list, e.g. ADV_WATCHLIST="AAPL,MSFT,NVDA". The default below is
 # only an illustrative example.
 DEFAULT_WATCHLIST = ["AAPL", "MSFT", "NVDA", "JPM", "XOM"]
-WATCHLIST = [
-    t.strip().upper()
-    for t in os.getenv("ADV_WATCHLIST", ",".join(DEFAULT_WATCHLIST)).split(",")
-    if t.strip()
-]
+WATCHLIST = [t.strip().upper() for t in os.getenv("ADV_WATCHLIST", ",".join(DEFAULT_WATCHLIST)).split(",") if t.strip()]
 
 DEFAULT_PERIOD = "3mo"
 RECENT_WINDOW = 20  # trading days ≈ 1 month, for the trend check
@@ -146,9 +143,7 @@ def render_table(rows: list[dict], period: str, flow: float | None) -> str:
         lines.append(f"Sizing ${flow / 1e6:,.0f}M of flow against MEDIAN $ADV (the conservative read):")
         for r in ok:
             median = r["dollar_adv_median"]
-            lines.append(
-                f"  {r['symbol']:<6} {flow / median:>7.1f}x ADV  =  {flow / median:>6.1f} days of volume"
-            )
+            lines.append(f"  {r['symbol']:<6} {flow / median:>7.1f}x ADV  =  {flow / median:>6.1f} days of volume")
 
     lines.append("")
     lines.append("Prefer the MEDIAN for sizing — the mean is inflated by rebalance/earnings prints.")
@@ -160,8 +155,12 @@ def render_table(rows: list[dict], period: str, flow: float | None) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Compute ADV from OHLCV for forced-flow sizing.")
     parser.add_argument("symbols", nargs="*", help="Ticker symbols (omit with --watchlist)")
-    parser.add_argument("--watchlist", action="store_true", help=f"Use the configured watchlist: {', '.join(WATCHLIST)}")
-    parser.add_argument("--period", default=DEFAULT_PERIOD, help="Lookback: 1mo, 3mo, 6mo, 1y, 2y, 5y, max (default 3mo)")
+    parser.add_argument(
+        "--watchlist", action="store_true", help=f"Use the configured watchlist: {', '.join(WATCHLIST)}"
+    )
+    parser.add_argument(
+        "--period", default=DEFAULT_PERIOD, help="Lookback: 1mo, 3mo, 6mo, 1y, 2y, 5y, max (default 3mo)"
+    )
     parser.add_argument("--interval", default="1d", help="Bar interval (default 1d)")
     parser.add_argument("--flow", type=float, help="Dollar flow to size against ADV, e.g. 1.0e9")
     parser.add_argument("--json", action="store_true", help="Emit raw JSON instead of the table")

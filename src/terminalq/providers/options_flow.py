@@ -15,10 +15,11 @@ import asyncio
 import math
 from datetime import datetime, timezone
 
-from terminalq import cache
-from terminalq._lazy_yfinance import yfinance
 from terminalq.config import CACHE_TTL_OPTIONS_GAMMA, OPTIONS_GAMMA_EXPIRIES
 from terminalq.logging_config import log
+
+from terminalq import cache
+from terminalq._lazy_yfinance import yfinance
 
 _SQRT_2PI = math.sqrt(2 * math.pi)
 

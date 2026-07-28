@@ -1,6 +1,6 @@
 ---
 name: tq-jp-style
-description: Full JPMorgan-style macro and market intelligence brief — runs all 11 analyses in parallel
+description: Full institutional-style macro and market intelligence brief — runs all 11 analyses in parallel
 ---
 
 Run ALL of the following tools **simultaneously in parallel** (do not wait for one before starting the next):

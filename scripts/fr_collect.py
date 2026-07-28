@@ -44,9 +44,15 @@ below to its provider call. The plumbing, brief writer, and failure handling
 are done. See FR_COLLECT_SPEC section at the bottom for the full field list.
 ======================================================================
 """
+
 from __future__ import annotations
-import argparse, asyncio, json, sys, datetime as dt
+
+import argparse
+import asyncio
+import datetime as dt
+import json
 import os
+import sys
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
@@ -78,18 +84,12 @@ from terminalq.providers import (  # noqa: E402
 )
 
 # Output location. Set FR_BRIEF_DIR to point this at your own reports folder.
-BRIEF_DIR = Path(
-    os.getenv("FR_BRIEF_DIR", str(Path.home() / "market-reports" / ".briefs"))
-)
+BRIEF_DIR = Path(os.getenv("FR_BRIEF_DIR", str(Path.home() / "market-reports" / ".briefs")))
 FAIL = "data unavailable (source failed)"
 
 # Tickers pulled for the EOD research-watchlist block. Set FR_WATCHLIST
 # (comma-separated) to your own names; the default is an example only.
-WATCHLIST = [
-    t.strip().upper()
-    for t in os.getenv("FR_WATCHLIST", "AAPL,MSFT,NVDA,JPM,XOM").split(",")
-    if t.strip()
-]
+WATCHLIST = [t.strip().upper() for t in os.getenv("FR_WATCHLIST", "AAPL,MSFT,NVDA,JPM,XOM").split(",") if t.strip()]
 
 
 def a(coro_fn: Callable[..., Awaitable[Any]]) -> Callable[..., Any]:
@@ -213,6 +213,7 @@ TOOL_MAP_FR: dict = {
     "style_box": (a(market_data.get_style_box), (), {}),
     "asset_class_returns": (a(market_data.get_asset_class_returns), (), {}),
     "correlation_matrix": (a(correlation.get_cross_asset_correlation_matrix), ("",), {}),
+    "correlation_regime": (a(correlation_regime.get_correlation_regime), ("",), {}),
     "international_markets": (a(market_data.get_international_markets), (), {}),
     "economic_calendar": (a(finnhub.get_economic_calendar), (7,), {}),
     "cot_report_sp500": (a(cftc.get_cot_report), ("sp500",), {}),
@@ -259,11 +260,15 @@ def derive(raw: dict) -> dict:
     # CCC-BB credit-quality gap
     ccc = dig(raw.get("credit_spreads", {}), "indicators.ccc_spread.latest_value", None)
     bb = dig(raw.get("credit_spreads", {}), "indicators.bb_spread.latest_value", None)
-    d["ccc_minus_bb_pp"] = round(ccc - bb, 2) if isinstance(ccc, (int, float)) and isinstance(bb, (int, float)) else FAIL
+    d["ccc_minus_bb_pp"] = (
+        round(ccc - bb, 2) if isinstance(ccc, (int, float)) and isinstance(bb, (int, float)) else FAIL
+    )
     # Realized effective tariff = customs duties / imports
     duties = dig(raw.get("mc_B235RC1Q027SBEA", {}), "latest", None)
     imports = dig(raw.get("mc_IMPGS", {}), "latest", None)
-    d["realized_tariff_pct"] = round(100 * duties / imports, 2) if isinstance(duties, (int, float)) and imports else FAIL
+    d["realized_tariff_pct"] = (
+        round(100 * duties / imports, 2) if isinstance(duties, (int, float)) and imports else FAIL
+    )
     # Net liquidity = Fed BS(bn) - RRP(bn) - TGA(bn)  [already in liquidity payload]
     d["net_liquidity_b"] = dig(raw.get("liquidity", {}), "net_liquidity_proxy_billions", FAIL)
     # Equity risk premium from valuation payload (already computed there)
@@ -277,9 +282,11 @@ def derive(raw: dict) -> dict:
 # ---------------------------------------------------------------------------
 def write_brief(raw: dict, derived: dict, mode: str, date: str) -> str:
     lines = [f"# {mode.upper()} DATA BRIEF — {date}", ""]
-    lines.append("> Every value below is a live TerminalQ provider result from THIS run, "
-                 "extracted by explicit field path. `data unavailable (source failed)` = "
-                 "that source failed; do NOT fill it from memory. GSCPI + last30days are EXTERNAL.")
+    lines.append(
+        "> Every value below is a live TerminalQ provider result from THIS run, "
+        "extracted by explicit field path. `data unavailable (source failed)` = "
+        "that source failed; do NOT fill it from memory. GSCPI + last30days are EXTERNAL."
+    )
     lines.append("")
     lines.append("## Derived (computed in code)")
     for k, v in derived.items():
@@ -288,10 +295,10 @@ def write_brief(raw: dict, derived: dict, mode: str, date: str) -> str:
     lines.append("## Raw source digests")
     for label, payload in raw.items():
         if isinstance(payload, dict) and payload.get("_value") == FAIL:
-            lines.append(f"- **{label}**: {FAIL} ({payload.get('_error','')[:80]})")
+            lines.append(f"- **{label}**: {FAIL} ({payload.get('_error', '')[:80]})")
         else:
             # Compact one-line JSON; the model parses the numbers it needs.
-            lines.append(f"- **{label}**: {json.dumps(payload, separators=(',',':'))[:1200]}")
+            lines.append(f"- **{label}**: {json.dumps(payload, separators=(',', ':'))[:1200]}")
     lines.append("")
     return "\n".join(lines)
 
@@ -304,8 +311,7 @@ def main() -> int:
     tool_map = TOOL_MAP_FR if args.mode == "fr" else TOOL_MAP_EOD
 
     if not tool_map:
-        print("TOOL_MAP is empty — complete the wiring per the header/build spec first.",
-              file=sys.stderr)
+        print("TOOL_MAP is empty — complete the wiring per the header/build spec first.", file=sys.stderr)
         return 2
 
     raw = {label: safe(fn, *a, **kw) for label, (fn, a, kw) in tool_map.items()}

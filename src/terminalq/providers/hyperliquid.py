@@ -17,7 +17,6 @@ can fall through to its existing CoinGecko error.
 """
 
 import httpx
-
 from terminalq.logging_config import log
 
 INFO_URL = "https://api.hyperliquid.xyz/info"

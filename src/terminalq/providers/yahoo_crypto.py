@@ -17,8 +17,9 @@ so callers can branch instead of handling exceptions.
 
 import asyncio
 
-from terminalq._lazy_yfinance import yfinance
 from terminalq.logging_config import log
+
+from terminalq._lazy_yfinance import yfinance
 
 # yfinance ``.history`` only accepts named periods, not "Nd". Map a requested
 # day count to the smallest named period that yields at least that many daily

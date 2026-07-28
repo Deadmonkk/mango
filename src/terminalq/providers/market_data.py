@@ -3,8 +3,6 @@
 import asyncio
 from datetime import datetime, timezone
 
-from terminalq import cache
-from terminalq._lazy_yfinance import yfinance
 from terminalq.config import (
     CACHE_TTL_EQUITY_SENTIMENT,
     CACHE_TTL_FED_PATH,
@@ -20,6 +18,9 @@ from terminalq.config import (
     VIX_TERM_COMPLACENCY_RATIO,
 )
 from terminalq.logging_config import log
+
+from terminalq import cache
+from terminalq._lazy_yfinance import yfinance
 
 # ---------------------------------------------------------------------------
 # Ticker registries

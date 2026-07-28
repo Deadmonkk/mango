@@ -10,8 +10,9 @@ every word of every report.
 import re
 
 from terminalq.config import REPORTS_DIR
-from terminalq.history import latest_snapshot_per_day
 from terminalq.logging_config import log
+
+from terminalq.history import latest_snapshot_per_day
 
 # Headers whose sections carry the narrative (matched case-insensitively, loosely).
 _WANTED_SECTIONS = ("regime", "what changed", "synthesis")

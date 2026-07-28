@@ -4,7 +4,7 @@ An extension pack of market-data providers, analytics modules, and workflow comm
 for [TerminalQ](https://github.com/fakoli/terminalq), a Bloomberg-style financial
 terminal that runs as a Claude Code plugin.
 
-**32 modules, 36 test files, ~9,400 lines.** Every data source added here is free and
+**31 modules, 31 test files, ~8,900 lines.** Every data source added here is free and
 most require no API key at all.
 
 ## About this project
@@ -24,9 +24,11 @@ Things I already know are rough, so you don't have to hunt for them:
 - The HTML scrapers parse tables with regex rather than a real parser. That avoids a
   dependency for what is simple table extraction, and every caller fails soft — but
   it's the classic thing to flag, and I'd rather name it than have it found.
-- Four of the test files exercise TerminalQ's own modules rather than mine, so they
-  won't run against this repo alone (see [Testing](#testing)).
-- `_html.py` is the one module with no direct test coverage.
+- `_html.py` is the one module with no direct test coverage, and it's the shared
+  parser behind four scraped providers — so it's the least-covered thing that
+  matters most.
+- Several modules only make sense inside a report-generating workflow
+  (`reports.py`, `backfill.py`), so they'll look inert if you just read them cold.
 
 **Issues and PRs are welcome, including blunt ones.** If something here is wrong or
 naive, I'd rather hear it than keep shipping it.
@@ -116,7 +118,7 @@ flowchart LR
         A3["Scraped tables<br/>AAII · Farside · multpl"]
     end
 
-    subgraph PROV["Providers (21)"]
+    subgraph PROV["Providers (20)"]
         P["fail soft<br/>+ fallback on outage"]
     end
 
@@ -205,23 +207,18 @@ dependencies except `pandas`.
 
 ## Testing
 
-36 test files, **319 tests, all passing** against a TerminalQ checkout with this pack
-overlaid. Network calls are mocked throughout, so the suite runs offline and
-deterministically — no API keys or live endpoints needed.
+31 test files, **296 tests, all passing** against a TerminalQ checkout with this pack
+overlaid. Every test covers a module shipped here. Network calls are mocked
+throughout, so the suite runs offline and deterministically — no API keys or live
+endpoints needed.
 
 ```bash
 uv run pytest tests/
 ```
 
-Two caveats worth stating plainly:
-
-- **Four test files exercise TerminalQ's own modules**, not mine —
-  `test_coingecko.py`, `test_metric_context.py`, `test_release_calendar.py`, and
-  `test_trending_fallback.py` target upstream's `coingecko`, `fred`, and `finnhub`
-  providers. I wrote those tests, but they cover upstream code, so the honest count
-  of tests covering *this pack* is 32 files.
-- **`_html.py` has no direct test.** It's small, but it's the shared parsing helper
-  behind four scraped providers, so it's the least-covered thing that matters most.
+One gap worth stating plainly: **`_html.py` has no direct test.** It's small, but it's
+the shared parsing helper behind four scraped providers, so it's the least-covered
+thing that matters most.
 
 CI runs the suite on every push by checking out TerminalQ, overlaying this pack, and
 running pytest — see [`.github/workflows/tests.yml`](.github/workflows/tests.yml).

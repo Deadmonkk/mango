@@ -101,9 +101,7 @@ def test_finite_coerces_nan_and_garbage():
 async def test_dealer_gamma_survives_nan_open_interest():
     """Yahoo chains return NaN for openInterest/IV; int(NaN) used to crash the tool."""
     ticker = MagicMock()
-    ticker.history.return_value = pd.DataFrame(
-        {"Close": [600.0]}, index=pd.date_range("2026-06-10", periods=1)
-    )
+    ticker.history.return_value = pd.DataFrame({"Close": [600.0]}, index=pd.date_range("2026-06-10", periods=1))
     ticker.options = ["2099-01-15"]
     nan = float("nan")
     calls = pd.DataFrame(
@@ -113,9 +111,7 @@ async def test_dealer_gamma_survives_nan_open_interest():
             "impliedVolatility": [nan, 0.18],
         }
     )
-    puts = pd.DataFrame(
-        {"strike": [580.0], "openInterest": [9000], "impliedVolatility": [nan]}
-    )
+    puts = pd.DataFrame({"strike": [580.0], "openInterest": [9000], "impliedVolatility": [nan]})
     ticker.option_chain.return_value = _chain(calls, puts)
 
     with patch("terminalq.providers.options_flow.yfinance.Ticker", return_value=ticker):

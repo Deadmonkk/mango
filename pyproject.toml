@@ -27,6 +27,12 @@ dev = [
 asyncio_mode = "auto"
 testpaths = ["tests"]
 
+# Matches TerminalQ's own ruff settings — this code is overlaid into that tree,
+# so it should lint and format identically to the surrounding modules.
 [tool.ruff]
 target-version = "py311"
-line-length = 100
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]

@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import asyncio
 
+from terminalq.logging_config import log
+
 from terminalq import cache
 from terminalq._lazy_yfinance import yfinance
-from terminalq.logging_config import log
 
 
 async def ticker_window_return(symbol: str, start: str, end: str, cache_prefix: str, cache_ttl: int) -> dict:

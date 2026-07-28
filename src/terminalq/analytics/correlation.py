@@ -2,10 +2,11 @@
 
 import asyncio
 
-from terminalq import cache
-from terminalq._lazy_yfinance import yfinance
 from terminalq.config import CACHE_TTL_CORRELATIONS
 from terminalq.logging_config import log
+
+from terminalq import cache
+from terminalq._lazy_yfinance import yfinance
 from terminalq.providers.crypto_analytics import _daily_returns, _pearson
 
 # Default cross-asset universe: equities, bonds, commodities, dollar, crypto

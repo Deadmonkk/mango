@@ -9,7 +9,6 @@ nowcast. Fills the 'cycle position' layer of a top-down framework.
 import asyncio
 import statistics
 
-from terminalq import cache
 from terminalq.config import (
     CACHE_TTL_CYCLE,
     CLAIMS_DETERIORATION_PCT,
@@ -17,6 +16,8 @@ from terminalq.config import (
     SAHM_TRIGGER_PP,
 )
 from terminalq.logging_config import log
+
+from terminalq import cache
 from terminalq.providers import fred
 
 _CLAIMS_AVG_WEEKS = 4  # standard 4-week moving average for jobless claims

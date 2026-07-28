@@ -1,10 +1,10 @@
 """CFTC Commitment of Traders provider — futures positioning, free and unauthenticated."""
 
 import httpx
-
-from terminalq import cache
 from terminalq.config import CACHE_TTL_COT, COT_LARGE_SPEC_EXTREME_RATIO
 from terminalq.logging_config import log
+
+from terminalq import cache
 
 BASE_URL = "https://publicreporting.cftc.gov/resource/6dca-aqww.json"
 

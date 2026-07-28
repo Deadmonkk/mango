@@ -8,14 +8,14 @@ demand is spiking (bull-market congestion or an inscription/ordinals wave).
 import math
 
 import httpx
-
-from terminalq import cache
 from terminalq.config import (
     CACHE_TTL_MEMPOOL,
     MEMPOOL_FEE_CONGESTED_SAT_VB,
     MEMPOOL_FEE_QUIET_SAT_VB,
 )
 from terminalq.logging_config import log
+
+from terminalq import cache
 
 BASE_URL = "https://mempool.space/api"
 

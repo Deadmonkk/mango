@@ -10,8 +10,6 @@ historical snapshots (both windows come from one 6-month price pull).
 
 import asyncio
 
-from terminalq import cache
-from terminalq.analytics.correlation import DEFAULT_UNIVERSE, _fetch_closes
 from terminalq.config import (
     CACHE_TTL_CORRELATION_REGIME,
     CORRELATION_REGIME_LONG_DAYS,
@@ -19,6 +17,9 @@ from terminalq.config import (
     CORRELATION_REGIME_SHORT_DAYS,
 )
 from terminalq.logging_config import log
+
+from terminalq import cache
+from terminalq.analytics.correlation import DEFAULT_UNIVERSE, _fetch_closes
 from terminalq.providers.crypto_analytics import _daily_returns, _pearson
 
 MIN_DATA_POINTS = CORRELATION_REGIME_LONG_DAYS + 5

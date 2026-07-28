@@ -3,7 +3,7 @@
 The regime scores are weighted by academic priors. This closes the loop: for
 every past snapshot, look up what BTC / the S&P actually did N days later and
 group the realized forward returns by score band. Over time it answers the only
-question that matters — "when my Crypto Regime score was high, did forward
+question that matters — "when the Crypto Regime score was high, did forward
 returns actually reward it?" — turning theory into something checked against the
 assets you watch. Early on the sample is tiny; the tool says so rather than
 pretending a handful of points is signal.
@@ -11,8 +11,9 @@ pretending a handful of points is signal.
 
 from datetime import date, datetime, timedelta
 
-from terminalq.history import latest_snapshot_per_day
 from terminalq.logging_config import log
+
+from terminalq.history import latest_snapshot_per_day
 from terminalq.providers import historical
 
 # Band edges mirror the global FR scoring rubric.

@@ -40,9 +40,6 @@ import asyncio
 import datetime as dt
 
 import httpx
-
-from terminalq import cache
-from terminalq.analytics import backtest_utils
 from terminalq.config import (
     CACHE_TTL_CLIMATE,
     CACHE_TTL_STRESS_BACKTEST,
@@ -52,6 +49,9 @@ from terminalq.config import (
     CLIMATE_TEMP_ANOMALY_WATCH_C,
 )
 from terminalq.logging_config import log
+
+from terminalq import cache
+from terminalq.analytics import backtest_utils
 
 BASE_URL = "https://power.larc.nasa.gov/api/temporal"
 
@@ -333,7 +333,9 @@ async def get_climate_risk_watch() -> dict:
         results = await asyncio.gather(*(_region_reading(client, key, REGIONS[key], today) for key in keys))
         readings = dict(zip(keys, results))
 
-    flagged = [r["label"] for r in readings.values() if isinstance(r.get("signal"), str) and r["signal"].startswith("FLAGGED")]
+    flagged = [
+        r["label"] for r in readings.values() if isinstance(r.get("signal"), str) and r["signal"].startswith("FLAGGED")
+    ]
 
     result = {
         "regions": readings,

@@ -9,10 +9,10 @@ import re
 from datetime import date, timedelta
 
 import httpx
-
-from terminalq import cache
 from terminalq.config import CACHE_TTL_FOMC
 from terminalq.logging_config import log
+
+from terminalq import cache
 from terminalq.providers import _html
 
 CALENDAR_URL = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"

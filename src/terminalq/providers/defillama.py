@@ -3,8 +3,6 @@
 import asyncio
 
 import httpx
-
-from terminalq import cache
 from terminalq.config import (
     CACHE_TTL_DEFI,
     CACHE_TTL_STABLECOINS,
@@ -14,6 +12,8 @@ from terminalq.config import (
 )
 from terminalq.logging_config import log
 from terminalq.rate_limiter import RateLimiter
+
+from terminalq import cache
 
 BASE_URL = "https://api.llama.fi"
 STABLECOINS_BASE_URL = "https://stablecoins.llama.fi"
