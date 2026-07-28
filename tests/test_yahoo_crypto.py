@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from terminalq.providers import coingecko, crypto_analytics, yahoo_crypto
+from tests._upstream_wiring import requires
 
 
 @pytest.fixture(autouse=True)
@@ -107,6 +108,7 @@ async def test_fetch_crypto_quote_returns_none_when_no_data():
 # ---------------------------------------------------------------------------
 
 
+@requires(coingecko, "yahoo_crypto")
 async def test_get_crypto_quote_falls_back_to_yahoo():
     fake_quote = {
         "symbol": "BTC",
@@ -122,6 +124,7 @@ async def test_get_crypto_quote_falls_back_to_yahoo():
     assert "yahoo" in result["source"]
 
 
+@requires(coingecko, "yahoo_crypto")
 async def test_get_crypto_quote_surfaces_error_when_yahoo_also_down():
     with (
         patch.object(coingecko, "_fetch", AsyncMock(return_value={"_error": "Connection failed"})),
@@ -132,6 +135,7 @@ async def test_get_crypto_quote_surfaces_error_when_yahoo_also_down():
     assert result["source"] == "coingecko"
 
 
+@requires(coingecko, "yahoo_crypto")
 async def test_get_crypto_batch_falls_back_per_symbol():
     def _fb(symbol):
         return {

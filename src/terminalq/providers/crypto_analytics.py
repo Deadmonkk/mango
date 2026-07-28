@@ -4,7 +4,12 @@ import asyncio
 import math
 
 import httpx
-from terminalq.config import (
+from terminalq.logging_config import log
+from terminalq.providers.coingecko import BASE_URL, _fetch, _resolve_id
+
+from terminalq import cache
+from terminalq._lazy_yfinance import yfinance
+from terminalq.ext_settings import (
     CACHE_TTL_CORRELATIONS,
     CACHE_TTL_CRYPTO_TECHNICALS,
     CACHE_TTL_FEAR_GREED,
@@ -13,11 +18,6 @@ from terminalq.config import (
     FEAR_GREED_EXTREME_GREED,
     HALVING_INTERVAL,
 )
-from terminalq.logging_config import log
-from terminalq.providers.coingecko import BASE_URL, _fetch, _resolve_id
-
-from terminalq import cache
-from terminalq._lazy_yfinance import yfinance
 from terminalq.providers import mempool, yahoo_crypto
 
 _BLOCKCHAIN_COM_STATS = "https://api.blockchain.info/stats"

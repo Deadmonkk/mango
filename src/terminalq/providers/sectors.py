@@ -8,11 +8,11 @@ even when the index looks calm; cyclicals leading = risk-on confirmed.
 import asyncio
 import statistics
 
-from terminalq.config import CACHE_TTL_SECTORS
 from terminalq.logging_config import log
 
 from terminalq import cache
 from terminalq._lazy_yfinance import yfinance
+from terminalq.ext_settings import CACHE_TTL_SECTORS
 
 SECTOR_ETFS = {
     "XLK": "Technology",

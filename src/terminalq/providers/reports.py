@@ -9,9 +9,9 @@ every word of every report.
 
 import re
 
-from terminalq.config import REPORTS_DIR
 from terminalq.logging_config import log
 
+from terminalq.ext_settings import REPORTS_DIR
 from terminalq.history import latest_snapshot_per_day
 
 # Headers whose sections carry the narrative (matched case-insensitively, loosely).

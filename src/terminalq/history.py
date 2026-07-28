@@ -14,8 +14,9 @@ import json
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from terminalq.config import PORTFOLIO_DIR
 from terminalq.logging_config import log
+
+from terminalq.ext_settings import PORTFOLIO_DIR
 
 HISTORY_DIR = PORTFOLIO_DIR / "history"
 SNAPSHOTS_FILE = HISTORY_DIR / "snapshots.jsonl"

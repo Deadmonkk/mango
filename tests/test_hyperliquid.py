@@ -7,6 +7,7 @@ import httpx
 import pytest
 
 from terminalq.providers import coingecko, hyperliquid
+from tests._upstream_wiring import requires
 
 
 @pytest.fixture(autouse=True)
@@ -112,6 +113,7 @@ async def test_fetch_derivatives_network_error_returns_none():
 # ---------------------------------------------------------------------------
 
 
+@requires(coingecko, "hyperliquid")
 async def test_derivatives_falls_back_to_hyperliquid():
     fb = {"BTC": {"funding_rates": [0.01], "open_interests": [6000000.0]}}
     with (
@@ -126,6 +128,7 @@ async def test_derivatives_falls_back_to_hyperliquid():
     assert "single venue" in result["note"]
 
 
+@requires(coingecko, "hyperliquid")
 async def test_derivatives_surfaces_error_when_both_down():
     with (
         patch.object(coingecko, "_fetch", AsyncMock(return_value={"_error": "Connection failed"})),
@@ -136,6 +139,7 @@ async def test_derivatives_surfaces_error_when_both_down():
     assert result["source"] == "coingecko"
 
 
+@requires(coingecko, "hyperliquid")
 async def test_derivatives_uses_coingecko_when_available():
     """Happy path still uses CoinGecko's multi-exchange aggregate."""
     tickers = [

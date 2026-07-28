@@ -4,153 +4,158 @@
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
 
-An extension pack of market-data providers, analytics modules, and workflow commands
-for [TerminalQ](https://github.com/fakoli/terminalq), a Bloomberg-style financial
-terminal that runs as a Claude Code plugin.
+Add-on modules for [TerminalQ](https://github.com/fakoli/terminalq), a financial
+terminal that runs inside Claude Code. This pack adds 20 new data sources, some
+analysis tools, and a system that grades its own market predictions.
 
-**31 modules, 31 test files, ~8,900 lines.** Every data source added here is free and
-most require no API key at all.
+32 modules, 166 tests, about 8,900 lines. Almost every data source here is free, and
+most need no API key.
 
-## About this project
+## Why I built it
 
-I'm an undergraduate studying finance and business analytics, and I built this to
-answer a question I kept running into: how much of an institutional market-data setup
-can you reconstruct from public sources, for nothing?
+A Bloomberg terminal costs around $24,000 a year. I'm a college student, so that was
+never going to happen. But a lot of what those terminals show is public data that
+someone has packaged nicely. So I wanted to find out how much of it I could rebuild
+myself, for free.
 
-That framing matters for how you should read the code. **I'm not a professional
-software engineer, and this isn't production infrastructure.** It's a working tool I
-use for my own market research, built while learning. Some of the choices here are
-deliberate tradeoffs I can defend; others are probably just things I didn't know a
-better way to do yet, and I'd genuinely like to be told which is which.
+The answer turned out to be: quite a lot. Government agencies publish most economic
+data. Exchanges publish prices. The Fed publishes its own calendar. NASA publishes
+weather data you can use to watch crop-growing regions. None of it costs anything if
+you're willing to write the code to go and get it.
 
-Things I already know are rough, so you don't have to hunt for them:
+**A note on what this is.** I'm studying finance and business analytics, not computer
+science. This is a tool I actually use for my own market research, and I built it
+while learning to code properly. Some of the decisions here I can explain and defend.
+Others are probably just me not knowing a better way yet. I'd honestly like to know
+which is which, so if you spot something wrong, please tell me.
 
-- The HTML scrapers parse tables with regex rather than a real parser. That avoids a
-  dependency for what is simple table extraction, and every caller fails soft — but
-  it's the classic thing to flag, and I'd rather name it than have it found.
-- `_html.py` is the one module with no direct test coverage, and it's the shared
-  parser behind four scraped providers — so it's the least-covered thing that
-  matters most.
-- Several modules only make sense inside a report-generating workflow
-  (`reports.py`, `backfill.py`), so they'll look inert if you just read them cold.
+A few things I already know could be better, so you don't have to go looking:
 
-**Issues and PRs are welcome, including blunt ones.** If something here is wrong or
-naive, I'd rather hear it than keep shipping it.
+- The web scrapers pull data out of HTML tables using pattern matching instead of a
+  proper HTML parser. It works and it avoids adding a dependency, but it's the kind of
+  shortcut people rightly complain about.
+- One file, `_html.py`, has no tests of its own, and four of the scrapers depend on it.
+  That's the weakest spot in the test coverage.
+- A couple of modules (`reports.py`, `backfill.py`) only make sense if you're using the
+  full report workflow. Read on their own, they'll look like they don't do much.
 
 ---
 
-## What this adds
+## What's in it
 
-TerminalQ ships with quotes, fundamentals, and core macro data. This pack extends it in
-four directions.
+### Free data sources
 
-### 1. Free, keyless data providers
+Each of these goes straight to a public source and pulls the data down. No paid feeds,
+and for most of them, no signup either.
 
-Institutional market data is expensive. Every provider here reaches a public source
-directly — a government API, an exchange's public endpoint, or a scraped public table —
-so the whole pack runs at zero marginal cost.
-
-| Module | Source | What it gives you |
+| Module | Where the data comes from | What you get |
 |---|---|---|
-| `climate.py` | NASA POWER | Temperature and precipitation anomalies vs the 2001–2020 normal, across commodity-production regions |
-| `cftc.py` | CFTC | Commitment of Traders futures positioning — commercial vs speculative |
-| `defillama.py` | DefiLlama | DeFi total-value-locked and stablecoin supply |
-| `etf_flows.py` | Farside | Daily spot Bitcoin ETF flows |
-| `mempool.py` | mempool.space | Bitcoin fee and congestion microstructure |
-| `hyperliquid.py` | Hyperliquid | Perpetual funding rates and open interest |
-| `prediction_markets.py` | Polymarket | Live prediction-market odds |
-| `fed_calendar.py` | federalreserve.gov | FOMC meeting schedule |
-| `options_flow.py` | Yahoo option chains | Dealer gamma exposure and call/put walls |
-| `retail_sentiment.py` | AAII + Yahoo | Weekly bull-bear survey and SPY put/call ratio |
-| `sectors.py` | Yahoo | 11 SPDR sector ETFs measured against SPY |
-| `valuation.py` | multiple | Shiller CAPE, earnings yield, equity risk premium |
-| `cycle.py` | FRED | Six-signal recession dashboard (Sahm rule, yield curves, claims, NFCI) |
+| `climate.py` | NASA | How hot and how wet key farming and mining regions are, compared to their 20-year normal |
+| `cftc.py` | US futures regulator | Who's betting which way in futures markets |
+| `defillama.py` | DefiLlama | How much money is sitting in crypto lending and trading apps |
+| `etf_flows.py` | Farside | Money going into and out of Bitcoin ETFs each day |
+| `mempool.py` | mempool.space | How congested the Bitcoin network is and what fees people are paying |
+| `hyperliquid.py` | Hyperliquid exchange | Crypto derivatives positioning |
+| `prediction_markets.py` | Polymarket | What people are actually betting on real-world events |
+| `fed_calendar.py` | The Federal Reserve | When the Fed next meets |
+| `options_flow.py` | Yahoo options data | Where big options positions sit, and the price levels they tend to pin the market to |
+| `retail_sentiment.py` | AAII survey + Yahoo | Whether ordinary investors are feeling bullish or scared |
+| `sectors.py` | Yahoo | Which parts of the stock market are leading and which are lagging |
+| `valuation.py` | Several | Whether the stock market looks expensive by long-run historical standards |
+| `cycle.py` | Federal Reserve data | Six recession warning signals in one place |
 
-### 2. Analytics that add historical context
+### Putting numbers in context
 
-A raw number is close to meaningless without knowing where it sits in its own history.
-These modules answer "is this normal?" rather than just "what is this?".
+A number on its own usually doesn't tell you much. If I say credit spreads are 3.2%,
+that means nothing unless you know whether 3.2% is normal. These modules answer that.
 
-- **`percentiles.py`** — converts any metric into its percentile against its full history.
-  A high-yield spread of 3.2% means nothing on its own; *3.2%, the 2nd percentile of the
-  last 30 years* means credit markets are priced for near-perfection.
-- **`correlation.py` / `correlation_regime.py`** — cross-asset correlation matrix, plus
-  detection of when correlations are *tightening*. Assets moving together is a risk signal
-  that individual asset prices hide, because it means diversification has stopped working.
-- **`stress_backtest.py` / `backtest_utils.py`** — a registry for asking what actually
-  happened to prices during comparable historical stress windows.
-- **`fred_archive.py`** — a local archive of FRED series. Built after a data vendor
-  retroactively truncated a series' history behind a license change; archiving locally
-  means past analysis stays reproducible.
+- **`percentiles.py`** takes any number and tells you where it sits in its own history.
+  "Credit spreads are 3.2%" becomes "credit spreads are lower than they've been 98% of
+  the time in the last 30 years," which tells you something real: lenders are relaxed,
+  maybe too relaxed.
+- **`correlation.py`** and **`correlation_regime.py`** check whether different
+  investments are starting to move together. When everything moves as one, spreading
+  your money around stops protecting you. That's worth knowing before it matters.
+- **`stress_backtest.py`** looks up what actually happened to prices during past
+  periods that resembled today.
+- **`fred_archive.py`** keeps a local copy of economic data. I added this after a data
+  provider quietly deleted years of history I'd been relying on. Now old analysis stays
+  reproducible.
 
-### 3. A self-grading prediction ledger
+### Grading its own predictions
 
-The part I'd point at first. Analysis that is never scored drifts toward being
-unfalsifiable, so this makes it falsifiable by construction:
+This is the part I'd point at first.
 
-- **`history.py`** — append-only local store of dated regime snapshots and logged predictions.
-- **`prediction_grader.py`** — settles each prediction automatically once its horizon
-  elapses, by comparing against realized prices. No opportunity to quietly forget a bad
-  call. Each call settles on the close at its **due date**, not on whatever day grading
-  happens to run — grading is lazy, so pricing at run-time would silently turn a 30-day
-  call into a 45-day one and record a horizon nobody predicted.
-- **`regime_history.py`** — measures realized forward returns grouped by what the model
-  scored at the time, which is what tells you whether the scoring weights actually predict
-  anything or just feel plausible.
-- **`backfill.py`** — reconstructs the snapshot store from previously written reports.
+It's easy to write market commentary that sounds smart and never check whether it was
+right. Bad calls get forgotten and good ones get retold. So this keeps score whether I
+like it or not.
 
-### 4. Resilience and tooling
+- **`history.py`** writes down every prediction with a date and a deadline.
+- **`prediction_grader.py`** goes back once the deadline passes and checks what actually
+  happened. There's no step where I get to quietly drop a bad call.
+- **`regime_history.py`** groups past predictions by how confident the scoring model was
+  at the time, then shows what returns actually followed. That's the test of whether the
+  model predicts anything or just sounds convincing.
 
-- **Fallback providers** — `yahoo_crypto.py` and `hyperliquid.py` take over when the
-  primary source is rate-limited or down, so a single upstream outage doesn't kill a report.
-- **`_lazy_yfinance.py`** — defers a heavy import until first use, cutting cold-start time.
-- **`scripts/fr_collect.py`** — runs data collection out-of-process and emits a compact
-  brief, which substantially reduces the token cost of a full report.
-- **`scripts/adv.py`** — computes average daily volume from raw OHLCV rather than trusting
-  an aggregator's figure, and reports the median (the mean is skewed by rebalance days).
-- **`voice.py`** — spoken briefings through the macOS `say` command.
+One detail worth mentioning, because getting it wrong ruins the whole thing. A
+prediction has to be judged on the day it was due, not the day I happen to check it. If
+I make a 30-day call and check it six weeks later, I'm measuring 44 days, not 30, and my
+track record becomes meaningless. This originally had that bug. It's fixed, with tests.
+
+### Keeping it running
+
+- **Backups when a source breaks.** Free data sources go down or rate-limit you. When
+  the main crypto source fails, `yahoo_crypto.py` and `hyperliquid.py` step in so one
+  outage doesn't take down a whole report.
+- **`_lazy_yfinance.py`** delays loading a slow library until something actually needs
+  it, which makes startup noticeably faster.
+- **`scripts/fr_collect.py`** gathers data in a separate process and hands back a short
+  summary, which cuts the cost of generating a full report considerably.
+- **`scripts/adv.py`** works out how much a stock normally trades, calculated from raw
+  price data rather than trusting a website's number.
+- **`voice.py`** reads a market briefing out loud on a Mac.
 
 ---
 
-## How it fits together
+## How the pieces fit
 
 ```mermaid
 flowchart LR
-    subgraph SRC["Public sources — free, mostly keyless"]
-        A1["NASA POWER<br/>CFTC · FRED"]
+    subgraph SRC["Free public sources"]
+        A1["NASA · CFTC<br/>Federal Reserve"]
         A2["mempool.space<br/>Hyperliquid · DefiLlama"]
-        A3["Scraped tables<br/>AAII · Farside · multpl"]
+        A3["Public web tables<br/>AAII · Farside"]
     end
 
-    subgraph PROV["Providers (20)"]
-        P["fail soft<br/>+ fallback on outage"]
+    subgraph PROV["Data providers (20)"]
+        P["keep working<br/>when a source breaks"]
     end
 
-    subgraph ANA["Analytics (7)"]
-        N1["percentiles<br/>where does this sit vs its own history?"]
-        N2["correlation regime<br/>is diversification failing?"]
-        N3["stress backtest<br/>what happened last time?"]
+    subgraph ANA["Analysis (7)"]
+        N1["is this number<br/>normal, historically?"]
+        N2["are investments<br/>moving together?"]
+        N3["what happened<br/>last time?"]
     end
 
     subgraph LED["Prediction ledger"]
-        L1["log dated call"]
-        L2["settle on DUE date"]
-        L3["accuracy by regime score"]
+        L1["write down the call"]
+        L2["check it on the due date"]
+        L3["was the model right?"]
     end
 
     SRC --> PROV --> ANA --> LED
     L1 --> L2 --> L3
 ```
 
-The left-to-right path is the whole idea: pull a number from a free source, place it in
-its own historical distribution so it means something, then commit to a dated call and
-grade it later whether it worked or not.
+Reading left to right, that's the whole idea. Get a number from somewhere free. Work out
+whether it's unusual. Make a call based on it. Then go back later and find out if you
+were right.
 
-## What the output looks like
+## What it looks like when you run it
 
-`scripts/adv.py` computes average daily volume straight from OHLCV bars, so a claim
-about a large flow can be sized against real liquidity instead of an aggregator's
-figure. Actual output, run against three large caps:
+`scripts/adv.py` works out how much a stock normally trades in a day. That matters if
+you're trying to judge whether some big buy or sell order is actually large enough to
+move the price. Here's a real run:
 
 ```
 $ python scripts/adv.py AAPL MSFT NVDA --flow 1.0e9
@@ -173,24 +178,24 @@ Spiky names (>3x) disrupt more than days-of-volume implies: the flow day is not 
 Yahoo consolidated tape (incl. off-exchange prints); order-of-magnitude, not a filing.
 ```
 
-Two things that output is deliberately doing. It reports the **median alongside the
-mean**, because rebalance and earnings days produce volume prints many times a normal
-day and drag the mean above what the stock actually absorbs — AAPL's spikiness of 5.4x
-says its busiest day was over five times its median one. And it **restates its own
-caveats every run**, so a number can't get quoted later without the limits attached.
+Two things it's deliberately doing. It shows the median next to the average, because a
+handful of unusually busy days pull the average up and make a stock look more liquid
+than it really is on a normal day. AAPL's "5.4x" means its busiest day was over five
+times its typical one. And it repeats its own warnings every single time, so nobody
+quotes the number later without the caveats attached.
 
-## Installation
+---
 
-These modules import from TerminalQ's internals (`terminalq.cache`, `terminalq.config`,
-`terminalq.logging_config`, `terminalq.rate_limiter`, and several of its base providers).
-**This is an extension pack, not a standalone application** — it needs a TerminalQ
-checkout to run against.
+## Installing it
+
+These modules are built to sit inside TerminalQ and use its plumbing, so **this isn't a
+standalone program.** You need a copy of TerminalQ to add it to.
 
 ```bash
 git clone https://github.com/fakoli/terminalq.git
 git clone https://github.com/Deadmonkk/terminalq-extensions.git
 
-# overlay the extension files onto the TerminalQ tree
+# copy the extension files into the TerminalQ folder
 cp -r terminalq-extensions/src/terminalq/*      terminalq/src/terminalq/
 cp -r terminalq-extensions/commands/*           terminalq/commands/
 cp -r terminalq-extensions/tests/*              terminalq/tests/
@@ -199,63 +204,71 @@ cp -r terminalq-extensions/scripts              terminalq/
 cd terminalq && uv sync && uv run pytest
 ```
 
-New providers still need registering as MCP tools in TerminalQ's `server.py`. Those
-registrations are edits to upstream files and so are not included here.
+Two things aren't included, because both mean editing TerminalQ's own files rather than
+adding new ones:
 
-### Dependencies
+1. **Registering the new tools.** The new data providers need adding to TerminalQ's
+   `server.py` before Claude can call them by name.
+2. **Wiring up the backups.** The Yahoo and Hyperliquid fallbacks kick in from inside
+   TerminalQ's own crypto module, so that file needs a small hook added. Without it
+   everything still works when called directly. Only the automatic switchover is
+   inactive.
 
-`httpx`, `pandas`, `yfinance`, and `pytest` for the test suite. All are already TerminalQ
-dependencies except `pandas`.
+Settings are handled for you. `ext_settings.py` holds the roughly 55 thresholds and
+timing values this pack needs. If TerminalQ already defines one of them, its value wins.
+So you don't have to edit any config file to get started.
 
----
+### What it needs installed
 
-## Testing
+`httpx`, `pandas`, `yfinance`, and `pytest` for the tests. TerminalQ already includes
+everything except `pandas`.
 
-31 test files, **296 tests, all passing** against a TerminalQ checkout with this pack
-overlaid. Every test covers a module shipped here. Network calls are mocked
-throughout, so the suite runs offline and deterministically — no API keys or live
-endpoints needed.
+## Tests
+
+31 test files, 166 tests. Every test covers something in this pack. All the network
+calls are faked, so the tests run offline, instantly, and give the same answer every
+time. No API keys needed.
 
 ```bash
 uv run pytest tests/
 ```
 
-One gap worth stating plainly: **`_html.py` has no direct test.** It's small, but it's
-the shared parsing helper behind four scraped providers, so it's the least-covered
-thing that matters most.
+On a fresh TerminalQ copy, 156 pass and 10 skip. All 166 pass once you've added the
+hook described above. The 10 that skip are testing the automatic backup switchover,
+which can't happen until that hook exists. They skip with a message explaining exactly
+what's missing, rather than failing and making it look like something's broken.
 
-CI runs the suite on every push by checking out TerminalQ, overlaying this pack, and
-running pytest — see [`.github/workflows/tests.yml`](.github/workflows/tests.yml).
+The tests run automatically on every change through GitHub Actions, on a clean machine
+rather than just mine.
 
 ---
 
-## Design notes
+## A few things I decided on purpose
 
-A few constraints shaped this code, and they are the parts worth reading:
+**Free sources only.** Every single source here is a government agency, a public
+exchange, or a public web page. Nothing costs money and most needs no signup.
 
-**Free sources only.** Every provider is either a government API, a public exchange
-endpoint, or a scraped public table. No paid data feeds and, for most of them, no API key.
+**Assume sources will break.** Free things go down, change their page layout, or block
+you for asking too often. So nothing here crashes when a source fails. It reports the
+failure and, where possible, tries somewhere else.
 
-**Assume sources break.** Scraped tables change layout and public APIs rate-limit. Providers
-fail soft and hand off to a fallback rather than taking down an entire report.
+**Never guess a number.** If a source fails, the report says the data is unavailable. It
+does not estimate, fill in from last time, or quietly leave in a stale figure. A
+made-up number that looks reasonable is far more dangerous than an obvious gap.
 
-**Never invent a number.** When a source fails, the report says the data is unavailable.
-It does not interpolate, estimate, or fill the gap from memory — a plausible fabricated
-figure is worse than an acknowledged hole.
+**Context beats raw numbers.** A number without history invites confident nonsense. See
+the percentiles section above.
 
-**Percentiles over raw values.** A metric without historical context invites confident
-misreadings.
-
-**Predictions get graded.** See the ledger above.
+**Predictions get graded.** Covered above, but it's the thing I'd defend hardest.
 
 ---
 
 ## Credits
 
-Built as an extension to [TerminalQ](https://github.com/fakoli/terminalq) by Sekou
-Doumbouya. This repository contains only my own original modules; no upstream code is
-redistributed here.
+Built as an add-on to [TerminalQ](https://github.com/fakoli/terminalq) by Sekou
+Doumbouya. Everything in this repository is my own code. None of TerminalQ's code is
+copied here.
 
-## License
+## Licence
 
-MIT — see [LICENSE](LICENSE).
+MIT, so you can do essentially whatever you like with it. See [LICENSE](LICENSE).

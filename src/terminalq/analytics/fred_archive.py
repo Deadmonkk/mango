@@ -37,8 +37,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from terminalq.config import PORTFOLIO_DIR
 from terminalq.logging_config import log
+
+from terminalq.ext_settings import PORTFOLIO_DIR
 
 ARCHIVE_DIR = PORTFOLIO_DIR / "history" / "fred_archive"
 

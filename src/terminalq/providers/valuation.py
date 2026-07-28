@@ -11,11 +11,11 @@ import asyncio
 import re
 
 import httpx
-from terminalq.config import CACHE_TTL_VALUATION, ERP_THIN_CUSHION_PP
 from terminalq.logging_config import log
 
 from terminalq import cache
 from terminalq.analytics import percentiles
+from terminalq.ext_settings import CACHE_TTL_VALUATION, ERP_THIN_CUSHION_PP
 from terminalq.providers import _html, fred
 
 CAPE_URL = "https://www.multpl.com/shiller-pe/table/by-month"

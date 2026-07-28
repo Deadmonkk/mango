@@ -7,10 +7,10 @@ GBTC, ...) are the most direct gauge of institutional demand for Bitcoin.
 import re
 
 import httpx
-from terminalq.config import CACHE_TTL_ETF_FLOWS, ETF_FLOWS_DEFAULT_DAYS
 from terminalq.logging_config import log
 
 from terminalq import cache
+from terminalq.ext_settings import CACHE_TTL_ETF_FLOWS, ETF_FLOWS_DEFAULT_DAYS
 from terminalq.providers import _html
 
 BASE_URL = "https://farside.co.uk/btc/"

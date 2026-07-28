@@ -4,7 +4,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from terminalq.providers import event_scenarios
+from terminalq.providers import event_scenarios, fred
+from tests._upstream_wiring import requires
 
 
 @pytest.fixture(autouse=True)
@@ -22,6 +23,7 @@ _CALENDAR = {
 _SNAPSHOT = {"date": "2026-06-11", "equity_regime": 42, "crypto_regime": 49, "cpi_mom": 0.47, "fed_path": "+30bp"}
 
 
+@requires(fred, "get_release_calendar")
 async def test_event_scenarios_anchors_and_context():
     with (
         patch.object(event_scenarios.fred, "get_release_calendar", new=AsyncMock(return_value=_CALENDAR)),
@@ -40,6 +42,7 @@ async def test_event_scenarios_anchors_and_context():
     assert result["regime_context"]["fed_path"] == "+30bp"
 
 
+@requires(fred, "get_release_calendar")
 async def test_event_scenarios_no_snapshot():
     with (
         patch.object(event_scenarios.fred, "get_release_calendar", new=AsyncMock(return_value=_CALENDAR)),
@@ -51,6 +54,7 @@ async def test_event_scenarios_no_snapshot():
     assert result["regime_context"] == {}
 
 
+@requires(fred, "get_release_calendar")
 async def test_event_scenarios_calendar_error():
     err = {"error": "FRED_API_KEY not configured", "source": "fred"}
     with patch.object(event_scenarios.fred, "get_release_calendar", new=AsyncMock(return_value=err)):

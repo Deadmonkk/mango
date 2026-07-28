@@ -9,10 +9,10 @@ itself a signal: someone is wrong, and it is worth knowing who.
 import json
 
 import httpx
-from terminalq.config import CACHE_TTL_PREDICTION_MARKETS, PREDICTION_MARKETS_LIMIT
 from terminalq.logging_config import log
 
 from terminalq import cache
+from terminalq.ext_settings import CACHE_TTL_PREDICTION_MARKETS, PREDICTION_MARKETS_LIMIT
 
 SEARCH_URL = "https://gamma-api.polymarket.com/public-search"
 

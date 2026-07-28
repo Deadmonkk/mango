@@ -29,9 +29,8 @@ from __future__ import annotations
 
 import asyncio
 
-from terminalq.config import CACHE_TTL_STRESS_BACKTEST
-
 from terminalq.analytics import backtest_utils
+from terminalq.ext_settings import CACHE_TTL_STRESS_BACKTEST
 
 # ---------------------------------------------------------------------------
 # STRESS_EVENTS — dated, sourced windows for each metric crossing a real

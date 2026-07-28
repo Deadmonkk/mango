@@ -6,6 +6,7 @@ import httpx
 import pytest
 
 from terminalq.providers import fed_calendar, finnhub
+from tests._upstream_wiring import requires
 
 
 @pytest.fixture(autouse=True)
@@ -82,6 +83,7 @@ async def test_get_fomc_meetings_fetch_failure_returns_error():
     assert result["source"] == "federalreserve.gov"
 
 
+@requires(finnhub, "fred")
 async def test_economic_calendar_falls_back_to_fomc_on_finnhub_error():
     """Finnhub's calendar is premium-only — the tool must degrade to free sources.
 
