@@ -83,7 +83,7 @@ async def test_get_fomc_meetings_fetch_failure_returns_error():
     assert result["source"] == "federalreserve.gov"
 
 
-@requires(finnhub, "fred")
+@requires(finnhub, "fred_ext")
 async def test_economic_calendar_falls_back_to_fomc_on_finnhub_error():
     """Finnhub's calendar is premium-only — the tool must degrade to free sources.
 
@@ -98,7 +98,7 @@ async def test_economic_calendar_falls_back_to_fomc_on_finnhub_error():
     with (
         patch.object(finnhub, "_fetch", AsyncMock(return_value={"_error": "HTTP 403"})),
         patch.object(
-            finnhub.fred,
+            finnhub.fred_ext,
             "get_release_calendar",
             AsyncMock(return_value={"events": [], "source": "fred"}),
         ),

@@ -6,7 +6,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from terminalq.providers import finnhub, fred
+from ._upstream_wiring import requires
+
+from terminalq.providers import finnhub, fred_ext as fred
 
 
 @pytest.fixture(autouse=True)
@@ -48,14 +50,14 @@ def _release_payload():
 
 
 async def test_release_calendar_filters_to_high_impact(monkeypatch):
-    monkeypatch.setattr("terminalq.providers.fred.FRED_API_KEY", "test_key")
+    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "test_key")
 
     mock_client = AsyncMock()
     mock_client.get = AsyncMock(return_value=_mock_response(_release_payload()))
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("terminalq.providers.fred.httpx.AsyncClient", return_value=mock_client):
+    with patch("terminalq.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
         result = await fred.get_release_calendar(days=7)
 
     assert result["source"] == "fred"
@@ -77,12 +79,13 @@ async def test_release_calendar_filters_to_high_impact(monkeypatch):
 
 
 async def test_release_calendar_no_key_returns_error(monkeypatch):
-    monkeypatch.setattr("terminalq.providers.fred.FRED_API_KEY", "")
+    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "")
     result = await fred.get_release_calendar(days=7)
     assert "error" in result
     assert result["source"] == "fred"
 
 
+@requires(finnhub, "fred_ext")
 async def test_economic_calendar_fallback_merges_fred_and_fomc():
     """When Finnhub is premium-walled, the calendar merges FRED releases + FOMC, date-sorted."""
     fred_payload = {
@@ -104,7 +107,7 @@ async def test_economic_calendar_fallback_merges_fred_and_fomc():
     }
     with (
         patch.object(finnhub, "_fetch", AsyncMock(return_value={"_error": "HTTP 403"})),
-        patch.object(finnhub.fred, "get_release_calendar", AsyncMock(return_value=fred_payload)),
+        patch.object(finnhub.fred_ext, "get_release_calendar", AsyncMock(return_value=fred_payload)),
         patch.object(finnhub.fed_calendar, "get_fomc_meetings", AsyncMock(return_value=fomc_payload)),
     ):
         result = await finnhub.get_economic_calendar(days=7)
@@ -118,6 +121,7 @@ async def test_economic_calendar_fallback_merges_fred_and_fomc():
     assert "fred" in result["source"] and "federalreserve" in result["source"]
 
 
+@requires(finnhub, "fred_ext")
 async def test_economic_calendar_fallback_survives_fred_failure():
     """If FRED releases fail too, still return FOMC dates rather than nothing."""
     fomc_payload = {
@@ -127,7 +131,7 @@ async def test_economic_calendar_fallback_survives_fred_failure():
     }
     with (
         patch.object(finnhub, "_fetch", AsyncMock(return_value={"_error": "HTTP 403"})),
-        patch.object(finnhub.fred, "get_release_calendar", AsyncMock(return_value={"error": "boom", "source": "fred"})),
+        patch.object(finnhub.fred_ext, "get_release_calendar", AsyncMock(return_value={"error": "boom", "source": "fred"})),
         patch.object(finnhub.fed_calendar, "get_fomc_meetings", AsyncMock(return_value=fomc_payload)),
     ):
         result = await finnhub.get_economic_calendar(days=7)

@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from ._upstream_wiring import requires
+
 from terminalq.providers import coingecko
 
 
@@ -42,6 +44,7 @@ _MARKETS_PAYLOAD = [
 ]
 
 
+@requires(coingecko, "get_crypto_trending")
 async def test_trending_uses_markets_data_when_available():
     with patch.object(coingecko, "_fetch", AsyncMock(side_effect=[_TRENDING_PAYLOAD, _MARKETS_PAYLOAD])):
         result = await coingecko.get_crypto_trending()
@@ -51,6 +54,7 @@ async def test_trending_uses_markets_data_when_available():
     assert coin["change_7d_pct"] == -20.0
 
 
+@requires(coingecko, "get_crypto_trending")
 async def test_trending_falls_back_to_embedded_prices_on_markets_failure():
     """A 429 on the secondary markets call must not blank out prices — the
     trending payload itself carries price, 24h change, and market cap."""
