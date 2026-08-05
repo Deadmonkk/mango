@@ -89,3 +89,71 @@ VIX_HIGH_THRESHOLD = _from_upstream("VIX_HIGH_THRESHOLD", 30)
 VIX_LOW_THRESHOLD = _from_upstream("VIX_LOW_THRESHOLD", 15)
 VIX_TERM_BACKWARDATION_RATIO = _from_upstream("VIX_TERM_BACKWARDATION_RATIO", 1.0)
 VIX_TERM_COMPLACENCY_RATIO = _from_upstream("VIX_TERM_COMPLACENCY_RATIO", 0.85)
+
+# --- BTC on-chain valuation (MVRV) ---------------------------------------
+# MVRV = market cap / realized cap. Below 1.0 the average holder is underwater —
+# historically a capitulation zone. Added 2026-08-05 when the Crypto Regime
+# Score's heaviest component (on-chain valuation, 30%) was found to have had no
+# data source at all and to have been silently renormalised out of every run.
+CACHE_TTL_BTC_VALUATION = _from_upstream("CACHE_TTL_BTC_VALUATION", 21600)  # 6h; MVRV is daily
+MVRV_UNDERVALUED = _from_upstream("MVRV_UNDERVALUED", 1.0)
+MVRV_OVERVALUED = _from_upstream("MVRV_OVERVALUED", 3.5)
+# realized_price x MVRV must reproduce spot within this, else the reading is
+# flagged unreliable rather than scored.
+BTC_VALUATION_CROSSCHECK_TOLERANCE_PCT = _from_upstream("BTC_VALUATION_CROSSCHECK_TOLERANCE_PCT", 5.0)
+# Two independent MVRV sources (Coin Metrics primary, bitcoin-data.com second)
+# must agree within this, else flagged.
+MVRV_SOURCE_AGREEMENT_TOLERANCE_PCT = _from_upstream("MVRV_SOURCE_AGREEMENT_TOLERANCE_PCT", 5.0)
+
+# --- RSU tax assumptions --------------------------------------------------
+# Estimates only, never tax advice. Values match the documented defaults in
+# commands/tq-rsu-tax.md ("Defaults to 0.32") and server.py's tool signature.
+RSU_DEFAULT_MARGINAL_RATE = _from_upstream("RSU_DEFAULT_MARGINAL_RATE", 0.32)
+RSU_DEFAULT_LTCG_RATE = _from_upstream("RSU_DEFAULT_LTCG_RATE", 0.15)
+
+# --- CoinGecko tuning -----------------------------------------------------
+# RECONSTRUCTED 2026-08-05. These were defined in a local edit to upstream
+# config.py that was lost when that file was reverted to upstream state. The
+# code using them survived, so each value below is bounded by observed behaviour
+# rather than invented — but they are RECONSTRUCTIONS, not the originals.
+# Correct any that look wrong; nothing downstream asserts on their exact values.
+CACHE_TTL_CRYPTO_OVERVIEW = _from_upstream("CACHE_TTL_CRYPTO_OVERVIEW", 300)
+CACHE_TTL_CRYPTO_DEEP = _from_upstream("CACHE_TTL_CRYPTO_DEEP", 300)
+CACHE_TTL_CRYPTO_DERIVATIVES = _from_upstream("CACHE_TTL_CRYPTO_DERIVATIVES", 300)
+CACHE_TTL_CRYPTO_TRENDING = _from_upstream("CACHE_TTL_CRYPTO_TRENDING", 900)
+# Retry loop is `for attempt in range(MAX)` with `BASE * 2**attempt` backoff.
+COINGECKO_MAX_RETRIES = _from_upstream("COINGECKO_MAX_RETRIES", 3)
+COINGECKO_RETRY_BASE_DELAY = _from_upstream("COINGECKO_RETRY_BASE_DELAY", 1.0)
+# Alt-season index: `ratio >= X` = alt season, `ratio <= (1 - X)` = BTC season.
+# Bounded by: today's ratio 0.0 rendered "BTC season". 0.75 is the standard
+# altcoin-season-index cutoff and makes the BTC-season band ratio <= 0.25.
+CRYPTO_ALTCOIN_SEASON_THRESHOLD = _from_upstream("CRYPTO_ALTCOIN_SEASON_THRESHOLD", 0.75)
+# FDV / market-cap ratio above which future dilution is worth flagging.
+CRYPTO_FDV_DILUTION_WARNING = _from_upstream("CRYPTO_FDV_DILUTION_WARNING", 2.0)
+# Funding, percent per 8h. Bounded ABOVE by two observations that both rendered
+# "crowded LONG": the test fixture at 0.1000%/8h and live BTC at 0.0788%/8h.
+# 0.05%/8h (~55%/yr) is the conventional "elevated" line vs the ~0.01%/8h norm.
+CRYPTO_FUNDING_CROWDED_LONG = _from_upstream("CRYPTO_FUNDING_CROWDED_LONG", 0.05)
+CRYPTO_FUNDING_CROWDED_SHORT = _from_upstream("CRYPTO_FUNDING_CROWDED_SHORT", -0.05)
+# Pairs with FEAR_GREED_EXTREME_FEAR = 20 already defined above.
+FEAR_GREED_EXTREME_GREED = _from_upstream("FEAR_GREED_EXTREME_GREED", 80)
+
+
+def __getattr__(name: str):
+    """Fall back to upstream config for any constant this shim does not define.
+
+    PEP 562 module-level __getattr__. Without this, routing an import through the
+    shim requires the shim to redeclare EVERY name in that import statement, so
+    adding one new constant silently breaks unrelated ones. With it, the shim is
+    a true superset: its own values win, everything else passes through.
+    """
+    try:
+        from terminalq import config as _upstream
+    except ImportError as exc:  # pack installed without upstream present
+        raise AttributeError(name) from exc
+    try:
+        return getattr(_upstream, name)
+    except AttributeError as exc:
+        raise AttributeError(
+            f"{name!r} is defined neither in ext_settings nor upstream terminalq.config"
+        ) from exc

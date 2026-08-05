@@ -1,0 +1,428 @@
+"""Deterministic rendering layer for the FR/EOD data brief.
+
+WHY THIS EXISTS
+---------------
+`fr_collect.py` gathers every FR source out-of-context and used to hand the model
+a raw JSON dump (~13.6k tokens) from which it then wrote ~17.8k tokens of report.
+Most of that work is not judgment: building tables, placing numbers, turning a
+percentile into "rich vs cheap", and averaging the regime-score components are all
+deterministic. Anything deterministic belongs here, in Python, where it is free,
+instant, and cannot hallucinate a number.
+
+DIVISION OF LABOUR
+------------------
+  Python (this module)  finished markdown tables, rule-based Read verdicts,
+                        both regime scores, the delta vs the prior snapshot
+  Model                 interpretation prose only — 2-4 sentences per section
+                        plus the synthesis, written around finished tables
+
+Verdicts prefer the provider's OWN signal/interpretation string when one exists
+(providers already emit these), and fall back to a threshold rule. Neither path
+invents anything: a missing value renders as the FAIL sentinel and stays missing.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Callable
+
+FAIL = "data unavailable (source failed)"
+
+# --- scoring thresholds (no magic numbers inline) ------------------------
+VIX_CALM = 15.0                 # below this = complacent, scores low
+VIX_PANIC = 40.0                # at/above = panic, scores high (bottom-like)
+RSI_OVERSOLD = 30.0
+RSI_OVERBOUGHT = 70.0
+AAII_MAX_PESSIMISM = -30.0      # bull-bear spread at deep pessimism
+AAII_MAX_EUPHORIA = 30.0
+PUTCALL_FEAR = 1.20
+PUTCALL_GREED = 0.50
+CCC_BB_CALM_PP = 5.0            # CCC-BB gap: calm
+CCC_BB_STRESS_PP = 12.0         # CCC-BB gap: hidden stress in the low-quality tail
+# Funding bands, recalibrated 2026-08-05. The previous values (-20 / +100) were
+# set against an UNWEIGHTED cross-venue mean that overstated funding ~38x. With
+# OI-weighted data the historical average is ~11%/yr, so +100 was unreachable and
+# pinned the liquidation leg at 0. Verified against Coinglass OI-weighted.
+FUNDING_CAPITULATION = -10.0    # annualised %, shorts paying longs = washed out
+FUNDING_CROWDED = 30.0          # annualised %, well above the ~11%/yr norm
+STABLE_GROWTH_STRONG_PCT = 3.0  # 30d stablecoin supply growth = dry powder
+PCT_MAX = 100.0
+
+
+def dig(obj: Any, path: str, default: Any = None) -> Any:
+    """Extract by dotted/indexed path. Returns default on any miss — never guesses."""
+    cur = obj
+    try:
+        for key in path.split("."):
+            cur = cur[int(key)] if key.lstrip("-").isdigit() else cur[key]
+        return default if cur is None else cur
+    except (KeyError, IndexError, TypeError, ValueError):
+        return default
+
+
+def is_num(v: Any) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def clamp(v: float, lo: float = 0.0, hi: float = PCT_MAX) -> float:
+    """Bound a component score to 0-100.
+
+    Every `100 - percentile` component MUST pass through this. Providers are
+    expected to return percentiles in [0, 100], but an out-of-range value would
+    otherwise yield a score like 105 or -40 and silently corrupt the weighted
+    average — and a corrupted average can land outside every band label.
+    """
+    return max(lo, min(hi, v))
+
+
+def lerp_score(value: float, at_zero: float, at_hundred: float) -> float:
+    """Map value onto 0-100, where `at_zero` scores 0 and `at_hundred` scores 100."""
+    if at_hundred == at_zero:
+        return 50.0
+    return clamp(PCT_MAX * (value - at_zero) / (at_hundred - at_zero))
+
+
+# ---------------------------------------------------------------------------
+# Table rendering
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class Field:
+    """One row of a report table."""
+
+    label: str
+    source: str          # TOOL_MAP label, e.g. "credit_spreads"
+    path: str            # dotted path within that payload
+    unit: str = ""
+    read_path: str = ""  # provider's own signal/interpretation, if any
+    read_fn: Callable[[Any], str] | None = None
+    decimals: int = 2
+
+
+@dataclass(frozen=True)
+class Section:
+    """One numbered report section."""
+
+    number: str
+    title: str
+    fields: tuple[Field, ...] = field(default_factory=tuple)
+
+
+def fmt_value(v: Any, unit: str, decimals: int) -> str:
+    if v is None:
+        return FAIL
+    if is_num(v):
+        r = round(float(v), decimals)
+        # Render whole numbers as integers: "6" not "6.0", "197,000" not "197,000.0".
+        return f"{int(r):,}{unit}" if r == int(r) else f"{r:,}{unit}"
+    return str(v)[:90]
+
+
+def render_read(raw: dict, f: Field, value: Any) -> str:
+    """Verdict for the Read column: provider signal first, then a rule, else blank."""
+    if value is None:
+        return "source failed"
+    if f.read_path:
+        sig = dig(raw.get(f.source, {}), f.read_path)
+        if isinstance(sig, str) and sig.strip():
+            return sig.strip()[:110]
+    if f.read_fn and is_num(value):
+        return f.read_fn(float(value))
+    return ""
+
+
+def render_table(raw: dict, sec: Section) -> str:
+    """Finished markdown table for one section. The model never rebuilds this."""
+    if not sec.fields:
+        return ""
+    rows = ["| Measure | Value | Read |", "|---|---|---|"]
+    for f in sec.fields:
+        val = dig(raw.get(f.source, {}), f.path)
+        rows.append(f"| {f.label} | {fmt_value(val, f.unit, f.decimals)} | {render_read(raw, f, val)} |")
+    return "\n".join(rows)
+
+
+# ---------------------------------------------------------------------------
+# Regime scores — a weighted average is arithmetic, not judgment.
+# Components returning None are dropped and the remaining weights renormalised,
+# exactly as the FR playbook requires ("computed on available components").
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class Component:
+    name: str
+    weight: float
+    score: float | None
+    detail: str
+
+
+def _score_or_none(fn: Callable[[], float | None]) -> float | None:
+    try:
+        return fn()
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+
+
+def equity_components(raw: dict, derived: dict) -> list[Component]:
+    out: list[Component] = []
+
+    cape_pct = dig(raw.get("market_valuation", {}), "cape.percentile")
+    out.append(Component(
+        "Valuation", 0.30,
+        clamp(PCT_MAX - float(cape_pct)) if is_num(cape_pct) else None,
+        f"CAPE {dig(raw.get('market_valuation', {}), 'cape.latest', FAIL)} at {cape_pct}th pct",
+    ))
+
+    hy_pct = dig(raw.get("mc_hy_spread", {}), "percentile_since_start")
+    gap = derived.get("ccc_minus_bb_pp")
+    credit: float | None = None
+    if is_num(hy_pct):
+        # A tight index spread is bottom-like ONLY if the low-quality tail is calm too.
+        credit = clamp(PCT_MAX - float(hy_pct))
+        if is_num(gap):
+            credit -= lerp_score(float(gap), CCC_BB_CALM_PP, CCC_BB_STRESS_PP) * 0.5
+            credit = clamp(credit)
+    out.append(Component("Credit stress & quality", 0.20, credit,
+                         f"HY {hy_pct}th pct, CCC−BB {gap}pp"))
+
+    spread = dig(raw.get("retail_sentiment", {}), "aaii_survey.bull_bear_spread")
+    pc = dig(raw.get("retail_sentiment", {}), "spy_put_call.ratio")
+    legs = [lerp_score(float(spread), AAII_MAX_EUPHORIA, AAII_MAX_PESSIMISM)] if is_num(spread) else []
+    if is_num(pc):
+        legs.append(lerp_score(float(pc), PUTCALL_GREED, PUTCALL_FEAR))
+    out.append(Component("Pessimism", 0.20,
+                         sum(legs) / len(legs) if legs else None,
+                         f"AAII spread {spread}, put/call {pc}"))
+
+    vix = dig(raw.get("equity_sentiment", {}), "vix_term_structure.vix")
+    out.append(Component("Panic-vol regime", 0.15,
+                         lerp_score(float(vix), VIX_CALM, VIX_PANIC) if is_num(vix) else None,
+                         f"VIX {vix}"))
+
+    active = dig(raw.get("cycle_position", {}), "signals_active")
+    avail = dig(raw.get("cycle_position", {}), "signals_available")
+    cyc: float | None = None
+    if is_num(active) and is_num(avail) and avail:
+        cyc = PCT_MAX * (1 - float(active) / float(avail))
+        save_pct = dig(raw.get("mc_PSAVERT", {}), "percentile_since_start")
+        if is_num(save_pct):  # consumer squeeze docks this leg
+            cyc = clamp(cyc - (PCT_MAX - float(save_pct)) * 0.3)
+    out.append(Component("Cycle stabilizing", 0.05, cyc,
+                         f"{active}/{avail} recession signals active"))
+
+    # technicals_SPY uses a flat schema (rsi.rsi / sma.sma_200), unlike the
+    # crypto technicals payload's momentum.rsi_14 — do not unify these blindly.
+    rsi = dig(raw.get("technicals_SPY", {}), "rsi.rsi")
+    price = dig(raw.get("technicals_SPY", {}), "price")
+    sma200 = dig(raw.get("technicals_SPY", {}), "sma.sma_200")
+    legs = [lerp_score(float(rsi), RSI_OVERBOUGHT, RSI_OVERSOLD)] if is_num(rsi) else []
+    if is_num(price) and is_num(sma200) and sma200:
+        legs.append(lerp_score(PCT_MAX * (float(price) / float(sma200) - 1), 20.0, -20.0))
+    out.append(Component("Trend transition", 0.10,
+                         sum(legs) / len(legs) if legs else None,
+                         f"SPY RSI {rsi}, price {price} vs 200d {sma200}"))
+    return out
+
+
+def crypto_components(raw: dict, derived: dict) -> list[Component]:
+    out: list[Component] = []
+
+    # Scored by MVRV's percentile vs its own full history, mirroring how the
+    # equity leg scores CAPE. There is deliberately NO fallback to a fixed band
+    # map: that map scored MVRV 1.20 at 92/100 when its true rank was the 21st
+    # percentile, so running it when history is missing would produce a
+    # confident wrong number. Better to drop the leg and renormalise.
+    mvrv = dig(raw.get("btc_valuation", {}), "mvrv")
+    mvrv_pct = dig(raw.get("btc_valuation", {}), "mvrv_percentile")
+    if is_num(mvrv_pct):
+        onchain = clamp(PCT_MAX - float(mvrv_pct))
+        detail = f"MVRV {mvrv} at {mvrv_pct}th pct of history"
+    else:
+        onchain = None
+        detail = f"MVRV {mvrv} but no history to rank it" if is_num(mvrv) else "MVRV unavailable"
+    out.append(Component("On-chain valuation", 0.30, onchain, detail))
+
+    growth = dig(raw.get("stablecoins", {}), "supply_change_30d_pct")
+    funding = dig(raw.get("crypto_funding", {}), "funding_annualized_pct")
+    legs = [lerp_score(float(growth), -STABLE_GROWTH_STRONG_PCT, STABLE_GROWTH_STRONG_PCT)] if is_num(growth) else []
+    if is_num(funding):
+        legs.append(lerp_score(float(funding), FUNDING_CROWDED, FUNDING_CAPITULATION))
+    out.append(Component("Stress & dry powder", 0.20,
+                         sum(legs) / len(legs) if legs else None,
+                         f"stables 30d {growth}%, BTC funding {funding}%/yr (OI-weighted)"))
+
+    fg = dig(raw.get("fear_greed", {}), "current.value")
+    out.append(Component("Pessimism", 0.20,
+                         clamp(PCT_MAX - float(fg)) if is_num(fg) else None,
+                         f"Fear & Greed {fg}"))
+
+    out.append(Component("Liquidation/vol regime", 0.15,
+                         lerp_score(float(funding), FUNDING_CROWDED, FUNDING_CAPITULATION) if is_num(funding) else None,
+                         f"BTC funding {funding}%/yr (OI-weighted, basis-checked)"))
+
+    rsi = dig(raw.get("crypto_technicals_BTC", {}), "momentum.rsi_14")
+    dist = dig(raw.get("crypto_technicals_BTC", {}), "moving_averages.distance_from_200d_ma_pct")
+    legs = [lerp_score(float(rsi), RSI_OVERBOUGHT, RSI_OVERSOLD)] if is_num(rsi) else []
+    if is_num(dist):
+        legs.append(lerp_score(float(dist), 20.0, -20.0))
+    out.append(Component("Trend transition", 0.10,
+                         sum(legs) / len(legs) if legs else None,
+                         f"BTC RSI {rsi}, {dist}% vs 200d"))
+
+    flow = dig(raw.get("btc_etf_flows", {}), "window_net_flow_usd_m")
+    out.append(Component("Flows stabilizing", 0.05,
+                         lerp_score(float(flow), -1000.0, 1000.0) if is_num(flow) else None,
+                         f"ETF net flow ${flow}M"))
+    return out
+
+
+def band(score: float) -> str:
+    if score < 25:
+        return "Euphoric / expensive — poor risk-reward"
+    if score < 45:
+        return "Mid-cycle"
+    if score < 65:
+        return "Neutral / transitional"
+    if score < 80:
+        return "Bottom-forming — improving risk-reward"
+    return "Deep-value capitulation — historically strong forward returns"
+
+
+def score(components: list[Component]) -> tuple[float | None, str, bool]:
+    """Weighted average over available components; renormalises when some failed."""
+    live = [c for c in components if c.score is not None]
+    total_w = sum(c.weight for c in live)
+    if not live or total_w == 0:
+        return None, FAIL, True
+    value = round(sum(c.score * c.weight for c in live) / total_w, 1)
+    return value, band(value), len(live) < len(components)
+
+
+def render_score_block(title: str, components: list[Component]) -> str:
+    value, label, partial = score(components)
+    head = f"**{title}: {value}/100 — {label}**"
+    if partial:
+        head += "  _(computed on available components; failed ones renormalised out)_"
+    rows = ["", head, "", "| Component | Weight | Score | Driver |", "|---|---|---|---|"]
+    for c in components:
+        s = "—" if c.score is None else f"{round(c.score, 1)}"
+        rows.append(f"| {c.name} | {int(c.weight * 100)}% | {s} | {c.detail} |")
+    return "\n".join(rows)
+
+
+# ---------------------------------------------------------------------------
+# Anomaly detection — SURPRISING data, as distinct from MALFORMED data.
+#
+# `clamp`/`is_num` above guard against malformed input (a percentile of 140, a
+# string where a number belongs). This is the other layer: values that are
+# perfectly well-formed but sit at a historical extreme and deserve a human read.
+#
+# Detection is by PERCENTILE vs each series' own history, never by "X% above
+# average". A fixed percentage threshold is not portable across series: a 20%
+# daily move in VIX is unremarkable, the same move in the 10y yield is a
+# once-in-a-decade event. Percentile is unit-free and volatility-aware.
+#
+# CRITICAL: a flag NEVER suppresses, filters or alters a value. Extreme readings
+# are real exactly when the report matters most — a rule that discarded them
+# would have thrown out March 2020. Flag for attention; always show the number.
+# ---------------------------------------------------------------------------
+EXTREME_HIGH_PERCENTILE = 99.0
+EXTREME_LOW_PERCENTILE = 1.0
+NOTABLE_HIGH_PERCENTILE = 95.0
+NOTABLE_LOW_PERCENTILE = 5.0
+# A single-period move worth more than this share of a series' ENTIRE historical
+# range is a step change, not drift.
+LARGE_MOVE_SHARE_OF_RANGE_PCT = 5.0
+
+
+# A percentile computed over a few years is not a historical extreme. Series
+# whose history was truncated (e.g. the ICE BofA credit spreads lost everything
+# before 2023-08-07 to a license change) must never be described as "record".
+SHORT_HISTORY_YEARS = 10
+
+
+def history_window(payload: dict) -> str:
+    """Human-readable window a percentile was measured over, e.g. '(7,727 obs since 1996-12-31)'."""
+    n = payload.get("observations")
+    start = payload.get("history_start")
+    if is_num(n) and start:
+        return f"({int(n):,} obs since {start})"
+    if start:
+        return f"(since {start})"
+    return "(window unknown)"
+
+
+def is_short_history(payload: dict) -> bool:
+    """True when the history behind a percentile is too short to call it a record."""
+    start = payload.get("history_start")
+    end = payload.get("latest_date") or payload.get("history_end")
+    if not (isinstance(start, str) and len(start) >= 4):
+        return True
+    try:
+        end_year = int(str(end)[:4]) if end and str(end)[:4].isdigit() else 2026
+        return (end_year - int(start[:4])) < SHORT_HISTORY_YEARS
+    except ValueError:
+        return True
+
+
+def detect_anomalies(raw: dict) -> list[str]:
+    """Values at a historical extreme, or moving unusually far in one period."""
+    flags: list[str] = []
+
+    for label, payload in sorted(raw.items()):
+        if not isinstance(payload, dict):
+            continue
+
+        pct = payload.get("percentile_since_start")
+        name = label.removeprefix("mc_")
+        if is_num(pct):
+            latest = payload.get("latest")
+            window = history_window(payload)
+            # Decide NOTABILITY first. A short window qualifies how a flag is
+            # worded; it must never turn an unremarkable mid-range value INTO a
+            # flag, or every series with thin metadata would spam the list.
+            if pct >= NOTABLE_HIGH_PERCENTILE:
+                direction, extreme = "HIGH", pct >= EXTREME_HIGH_PERCENTILE
+            elif pct <= NOTABLE_LOW_PERCENTILE:
+                direction, extreme = "LOW", pct <= EXTREME_LOW_PERCENTILE
+            else:
+                continue
+
+            if is_short_history(payload):
+                # Rank within a limited period is not a historical extreme.
+                flags.append(
+                    f"{name} at {latest} — {pct:.1f}th percentile {window}. "
+                    f"SHORT WINDOW: a rank within a limited period, NOT a historical "
+                    f"extreme — do not call it a record."
+                )
+            elif extreme:
+                flags.append(f"**{name}** at {latest} — {pct:.1f}th percentile {window}, "
+                             f"a HISTORICAL {direction}")
+            else:
+                side = "top" if direction == "HIGH" else "bottom"
+                flags.append(f"{name} at {latest} — {pct:.1f}th percentile {window} ({side} 5%)")
+
+        # Step-change detection where the payload carries its own prior value.
+        for key, ind in (payload.get("indicators") or {}).items():
+            if not isinstance(ind, dict):
+                continue
+            cur, prev = ind.get("latest_value"), ind.get("previous_value")
+            if not (is_num(cur) and is_num(prev)):
+                continue
+            ctx = raw.get(f"mc_{key}") or {}
+            lo, hi = ctx.get("min"), ctx.get("max")
+            if is_num(lo) and is_num(hi) and hi > lo:
+                share = 100 * abs(cur - prev) / (hi - lo)
+                if share >= LARGE_MOVE_SHARE_OF_RANGE_PCT:
+                    flags.append(
+                        f"{key} moved {prev} -> {cur} in one period "
+                        f"({share:.1f}% of its entire historical range)"
+                    )
+    return flags
+
+
+def render_anomalies(raw: dict) -> str:
+    flags = detect_anomalies(raw)
+    if not flags:
+        return "## Anomaly watch\n\nNo metric at a historical extreme this run."
+    return ("## Anomaly watch — values at historical extremes\n\n"
+            "These are flagged for interpretation, NOT filtered: each number below is real "
+            "and appears in the tables above. Address the bolded ones in the report.\n\n"
+            + "\n".join(f"- {f}" for f in flags))

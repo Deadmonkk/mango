@@ -1,15 +1,17 @@
 """Crypto analytics provider — Fear & Greed, BTC on-chain, technicals, and macro correlations."""
 
 import asyncio
+import json
 import math
+from pathlib import Path
 
 import httpx
-from terminalq.logging_config import log
-from terminalq.providers.coingecko import BASE_URL, _fetch, _resolve_id
 
 from terminalq import cache
 from terminalq._lazy_yfinance import yfinance
 from terminalq.ext_settings import (
+    BTC_VALUATION_CROSSCHECK_TOLERANCE_PCT,
+    CACHE_TTL_BTC_VALUATION,
     CACHE_TTL_CORRELATIONS,
     CACHE_TTL_CRYPTO_TECHNICALS,
     CACHE_TTL_FEAR_GREED,
@@ -17,8 +19,13 @@ from terminalq.ext_settings import (
     FEAR_GREED_EXTREME_FEAR,
     FEAR_GREED_EXTREME_GREED,
     HALVING_INTERVAL,
+    MVRV_OVERVALUED,
+    MVRV_SOURCE_AGREEMENT_TOLERANCE_PCT,
+    MVRV_UNDERVALUED,
 )
+from terminalq.logging_config import log
 from terminalq.providers import mempool, yahoo_crypto
+from terminalq.providers.coingecko import BASE_URL, _fetch, _resolve_id
 
 _BLOCKCHAIN_COM_STATS = "https://api.blockchain.info/stats"
 _ALTERNATIVE_ME_URL = "https://api.alternative.me/fng/"
@@ -540,3 +547,232 @@ async def get_crypto_correlations(symbol: str = "BTC") -> dict:
     }
     cache.set(cache_key, result, CACHE_TTL_CORRELATIONS)
     return result
+
+
+# ---------------------------------------------------------------------------
+# BTC on-chain valuation (MVRV / realized price)
+#
+# Fills the FR Crypto Regime Score's heaviest component (on-chain valuation,
+# 30%), which previously had NO source: blockchain.com's /stats returns network
+# and transaction data but no realized cap, so that leg was silently
+# renormalised out of every run.
+#
+# Source note (corrected 2026-08-04): Coin Metrics' community API returns HTTP
+# 403 for CapRealUSD, and that was initially mistaken for "Coin Metrics is not
+# free for this" — it is not. Only that one metric is gated; CapMVRVCur,
+# CapMrktCurUSD and SplyCur are all keyless on the community tier, and realized
+# price derives exactly from them. Lesson worth keeping: query the CATALOG
+# (/v4/catalog-v2/asset-metrics) before writing off a provider on one 403.
+# Coin Metrics is therefore PRIMARY; bitcoin-data.com is the second source.
+# ---------------------------------------------------------------------------
+_BITCOIN_DATA_BASE = "https://bitcoin-data.com/v1"
+_BITCOIN_DATA_REQUEST_SPACING_SECS = 1.5  # host 429s on bursts; space the two calls
+# Only the two fields the Crypto Regime Score actually needs. The host rate-limits
+# aggressively (429 on bursts), and every extra endpoint is another chance to trip
+# it and lose MVRV itself. mvrv-zscore/nupl/sopr are deliberately NOT fetched.
+_BTC_VALUATION_ENDPOINTS: dict[str, tuple[str, str]] = {
+    # label -> (endpoint, json field)
+    "mvrv": ("mvrv", "mvrv"),
+    "realized_price_usd": ("realized-price", "realizedPrice"),
+}
+
+
+_LAST_GOOD_VALUATION_PATH = Path.home() / ".terminalq" / "history" / "btc_valuation_last_good.json"
+
+
+def _load_last_good_valuation() -> dict | None:
+    """Last successfully fetched valuation, for use when the host rate-limits."""
+    try:
+        return json.loads(_LAST_GOOD_VALUATION_PATH.read_text())
+    except Exception:
+        return None
+
+
+def _save_last_good_valuation(payload: dict) -> None:
+    """Persist a good fetch. Failure to write must never break the report."""
+    try:
+        _LAST_GOOD_VALUATION_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _LAST_GOOD_VALUATION_PATH.write_text(json.dumps(payload))
+    except Exception as e:
+        log.warning("could not persist BTC valuation: %s", e)
+
+
+_COINMETRICS_BASE = "https://community-api.coinmetrics.io/v4/timeseries/asset-metrics"
+# Coin Metrics community tier: keyless, 6000 requests per 20s sliding window.
+# CapRealUSD (realized cap in USD) IS restricted on this tier, but CapMVRVCur
+# (the MVRV ratio itself) is not — and realized price can be derived exactly
+# from market cap / supply / MVRV, so the restriction does not matter here.
+_COINMETRICS_METRICS = "CapMVRVCur,CapMrktCurUSD,SplyCur"
+_COINMETRICS_HISTORY_START = "2011-01-01"
+_COINMETRICS_HISTORY_PAGE_SIZE = 10000
+_MVRV_MIN_HISTORY_OBSERVATIONS = 1000  # below this a percentile is not meaningful
+
+
+async def _fetch_mvrv_percentile(client: httpx.AsyncClient, current: float) -> float | None:
+    """Rank today's MVRV against its own full history.
+
+    A fixed linear map between hand-picked bounds (1.0 = cheap, 3.5 = rich) badly
+    overstates mildly-cheap readings: MVRV 1.20 scored 92/100 under that scheme
+    while actually sitting at the ~21st percentile of history. Percentile-vs-own-
+    history is both honest and consistent with how the equity leg scores CAPE.
+    """
+    try:
+        resp = await client.get(
+            _COINMETRICS_BASE,
+            params={"assets": "btc", "metrics": "CapMVRVCur", "frequency": "1d",
+                    "page_size": _COINMETRICS_HISTORY_PAGE_SIZE,
+                    "start_time": _COINMETRICS_HISTORY_START},
+            timeout=45,
+        )
+        resp.raise_for_status()
+        vals = [float(r["CapMVRVCur"]) for r in resp.json().get("data", []) if r.get("CapMVRVCur")]
+        if len(vals) < _MVRV_MIN_HISTORY_OBSERVATIONS:
+            return None
+        return round(100 * sum(1 for v in vals if v < current) / len(vals), 1)
+    except Exception as e:
+        log.warning("MVRV percentile fetch failed: %s", e)
+        return None
+
+
+async def _fetch_coinmetrics_valuation(client: httpx.AsyncClient) -> dict | None:
+    """MVRV from Coin Metrics. Primary source: reputable and generously rate-limited."""
+    try:
+        resp = await client.get(
+            _COINMETRICS_BASE,
+            params={"assets": "btc", "metrics": _COINMETRICS_METRICS,
+                    "frequency": "1d", "page_size": 1},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        rows = resp.json().get("data") or []
+        if not rows:
+            return None
+        row = rows[-1]
+        mvrv = float(row["CapMVRVCur"])
+        out = {"mvrv": round(mvrv, 4), "as_of": str(row.get("time", ""))[:10],
+               "source": "coinmetrics"}
+        mcap, supply = row.get("CapMrktCurUSD"), row.get("SplyCur")
+        if mcap and supply and mvrv:
+            # realized price = (market cap / supply) / MVRV — exact, not an estimate.
+            out["realized_price_usd"] = round(float(mcap) / float(supply) / mvrv, 2)
+        pct = await _fetch_mvrv_percentile(client, mvrv)
+        if pct is not None:
+            out["mvrv_percentile"] = pct
+        return out
+    except Exception as e:
+        log.warning("Coin Metrics MVRV fetch failed: %s", e)
+        return None
+
+
+def _mvrv_signal(mvrv: float) -> str:
+    if mvrv < MVRV_UNDERVALUED:
+        return f"MVRV {mvrv:.2f} — below 1.0: average coin held at a loss, historical capitulation zone"
+    if mvrv > MVRV_OVERVALUED:
+        return f"MVRV {mvrv:.2f} — above {MVRV_OVERVALUED}: stretched, has marked cycle tops"
+    return f"MVRV {mvrv:.2f} — between {MVRV_UNDERVALUED} and {MVRV_OVERVALUED}: neither washed out nor stretched"
+
+
+async def get_btc_valuation(spot_usd: float | None = None) -> dict:
+    """BTC on-chain valuation: MVRV, realized price, MVRV Z-score, NUPL, SOPR.
+
+    MVRV = market cap / realized cap, where realized cap values every coin at the
+    price it last moved. Below 1.0 the average holder is underwater.
+
+    When ``spot_usd`` is supplied, realized_price x MVRV is cross-checked against
+    it; a disagreement beyond the configured tolerance sets ``cross_check`` to a
+    warning string so a bad upstream value cannot quietly become a report figure.
+    Never raises — returns an ``error`` dict on failure, per provider convention.
+    """
+    cache_key = "btc_valuation"
+    cached = cache.get(cache_key)
+    if cached:
+        return cached
+
+    out: dict = {}
+    try:
+        async with httpx.AsyncClient() as client:
+            async def fetch(label: str, endpoint: str, field: str) -> None:
+                try:
+                    resp = await client.get(f"{_BITCOIN_DATA_BASE}/{endpoint}/last", timeout=10)
+                    resp.raise_for_status()
+                    payload = resp.json()
+                    value = payload.get(field)
+                    out[label] = float(value) if value is not None else None
+                    out.setdefault("as_of", payload.get("d"))
+                except Exception as e:  # one dead endpoint must not kill the rest
+                    log.warning("bitcoin-data %s fetch failed: %s", endpoint, e)
+                    out[label] = None
+
+            # Coin Metrics is PRIMARY (keyless, 6000 req/20s, institutional).
+            # bitcoin-data.com is the independent SECOND source: only 10 req/hour,
+            # so it is consulted for corroboration, not relied on alone.
+            primary = await _fetch_coinmetrics_valuation(client)
+
+            secondary: dict = {}
+            for label, (ep, field) in _BTC_VALUATION_ENDPOINTS.items():
+                await fetch(label, ep, field)
+                await asyncio.sleep(_BITCOIN_DATA_REQUEST_SPACING_SECS)
+            secondary = {k: out.get(k) for k in _BTC_VALUATION_ENDPOINTS}
+
+            if primary:
+                merged = dict(primary)
+                # Keep the second source's realized price only if we lack our own.
+                if merged.get("realized_price_usd") is None:
+                    merged["realized_price_usd"] = secondary.get("realized_price_usd")
+                second_mvrv = secondary.get("mvrv")
+                if isinstance(second_mvrv, (int, float)) and merged.get("mvrv"):
+                    drift = abs(second_mvrv - merged["mvrv"]) / merged["mvrv"] * 100
+                    merged["source_agreement"] = (
+                        f"ok — coinmetrics {merged['mvrv']} vs bitcoin-data {second_mvrv} "
+                        f"({drift:.1f}% apart)"
+                        if drift <= MVRV_SOURCE_AGREEMENT_TOLERANCE_PCT
+                        else f"WARNING — sources disagree: coinmetrics {merged['mvrv']} vs "
+                             f"bitcoin-data {second_mvrv} ({drift:.1f}% apart); treat MVRV as unreliable"
+                    )
+                    merged["source"] = "coinmetrics + bitcoin-data.com (2 sources agree)"
+                else:
+                    merged["source"] = "coinmetrics (second source unavailable this run)"
+                out = merged
+    except Exception as e:
+        log.warning("BTC valuation fetch failed: %s", e)
+        out = {}
+
+    if out.get("mvrv") is None:
+        # The free host allows only 10 requests/hour. MVRV is a DAILY metric, so
+        # a rate-limited run should serve the last good value with an explicit
+        # staleness label rather than blanking the Crypto Regime Score's heaviest
+        # component (30%). Labelled, not silent — the report must say it is stale.
+        stale = _load_last_good_valuation()
+        if stale:
+            stale["staleness"] = (
+                f"STALE — live fetch failed this run (rate limit or outage); "
+                f"serving last good value from {stale.get('as_of', 'unknown date')}"
+            )
+            stale["source"] = "bitcoin-data.com (cached, stale)"
+            return stale
+        return {"error": "MVRV unavailable and no cached value on disk",
+                "source": "bitcoin-data.com"}
+
+    out["signal"] = _mvrv_signal(out["mvrv"])
+
+    realized = out.get("realized_price_usd")
+    if spot_usd and realized:
+        implied = realized * out["mvrv"]
+        drift_pct = abs(implied - spot_usd) / spot_usd * 100
+        out["cross_check"] = (
+            f"ok — realized_price x MVRV implies ${implied:,.0f} vs spot ${spot_usd:,.0f} "
+            f"({drift_pct:.1f}% apart)"
+            if drift_pct <= BTC_VALUATION_CROSSCHECK_TOLERANCE_PCT
+            else f"WARNING — implied ${implied:,.0f} vs spot ${spot_usd:,.0f} "
+                 f"({drift_pct:.1f}% apart, over {BTC_VALUATION_CROSSCHECK_TOLERANCE_PCT}% tolerance); "
+                 f"treat MVRV as unreliable this run"
+        )
+
+    out["note"] = ("MVRV = market cap / realized cap. Realized cap values each coin at the price "
+                   "it last moved, so MVRV < 1 = average holder underwater.")
+    # Provenance is set by whichever path produced the value (coinmetrics,
+    # both-sources-agree, or the second source alone) — do not flatten it here.
+    out.setdefault("source", "bitcoin-data.com")
+    cache.set(cache_key, out, CACHE_TTL_BTC_VALUATION)
+    _save_last_good_valuation(out)
+    return out

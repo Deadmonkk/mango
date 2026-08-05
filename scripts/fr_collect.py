@@ -58,6 +58,8 @@ from typing import Any, Awaitable, Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
+from fr_sections import render_digest  # noqa: E402
+
 from terminalq.analytics import (  # noqa: E402
     correlation,
     correlation_regime,
@@ -68,6 +70,8 @@ from terminalq.providers import (  # noqa: E402
     cftc,
     coingecko,
     crypto_analytics,
+    crypto_funding,
+    gz_credit,
     cycle,
     defillama,
     edgar,
@@ -173,6 +177,11 @@ TOOL_MAP_FR: dict = {
     "crypto_deep_ETH": (a(coingecko.get_crypto_deep), ("ETH",), {}),
     "crypto_technicals_BTC": (a(crypto_analytics.get_crypto_technicals), ("BTC",), {}),
     "btc_onchain": (a(crypto_analytics.get_btc_onchain), (), {}),
+    "btc_valuation": (a(crypto_analytics.get_btc_valuation), (), {}),  # MVRV — Crypto Regime 30% leg
+    "crypto_funding": (a(crypto_funding.get_btc_funding), ("BTC",), {}),  # OI-weighted, not an unweighted mean
+    "crypto_funding_ETH": (a(crypto_funding.get_btc_funding), ("ETH",), {}),
+    "gz_credit": (a(gz_credit.get_gz_credit_spread), (), {}),  # long-history credit ref (1973+), non-ICE
+
     "crypto_derivatives": (a(coingecko.get_crypto_derivatives_dashboard), (), {}),
     "crypto_correlations": (a(crypto_analytics.get_crypto_correlations), ("BTC",), {}),
     "crypto_dominance": (a(coingecko.get_crypto_dominance), (), {}),
@@ -320,7 +329,11 @@ def main() -> int:
     (BRIEF_DIR / f"{args.mode}_raw_{date}.json").write_text(json.dumps(raw, indent=2, default=str))
     brief = write_brief(raw, derived, args.mode, date)
     (BRIEF_DIR / f"{args.mode}_brief_{date}.md").write_text(brief)
-    print(f"wrote {BRIEF_DIR}/{args.mode}_brief_{date}.md  ({len(brief)} chars)")
+    digest = render_digest(raw, derived, date, args.mode)
+    digest_path = BRIEF_DIR / f"{args.mode}_digest_{date}.md"
+    digest_path.write_text(digest)
+    print(f"wrote {digest_path}  ({len(digest)} chars ~= {len(digest)//4} tok)")
+    print(f"      raw brief kept as audit trail ({len(brief)} chars)")
     return 0
 
 
