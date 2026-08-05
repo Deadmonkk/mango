@@ -5,6 +5,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
+from ._upstream_wiring import requires
+
 from terminalq.providers import coingecko
 
 
@@ -35,12 +37,14 @@ def _mock_response(json_data, status_code=200):
 # ---------------------------------------------------------------------------
 
 
+@requires(coingecko, "_fetch_with_retry")
 def test_bnb_resolves_to_binancecoin():
     """BNB is a top-5 coin and must map to its CoinGecko ID, not lowercase passthrough."""
     assert coingecko._resolve_id("BNB") == "binancecoin"
     assert coingecko._resolve_id("bnb") == "binancecoin"
 
 
+@requires(coingecko, "_fetch_with_retry")
 def test_other_major_symbols_resolve():
     """Common top-20 symbols resolve to real CoinGecko IDs."""
     assert coingecko._resolve_id("TRX") == "tron"
@@ -48,6 +52,7 @@ def test_other_major_symbols_resolve():
     assert coingecko._resolve_id("XLM") == "stellar"
 
 
+@requires(coingecko, "_fetch_with_retry")
 def test_unknown_symbol_falls_back_to_lowercase():
     assert coingecko._resolve_id("SOMENEWCOIN") == "somenewcoin"
 
@@ -57,6 +62,7 @@ def test_unknown_symbol_falls_back_to_lowercase():
 # ---------------------------------------------------------------------------
 
 
+@requires(coingecko, "_fetch_with_retry")
 async def test_fetch_retries_on_429_then_succeeds():
     """A 429 response is retried with backoff and eventually succeeds."""
     responses = [_mock_response({}, 429), _mock_response({}, 429), _mock_response({"ok": True}, 200)]
@@ -78,6 +84,7 @@ async def test_fetch_retries_on_429_then_succeeds():
     assert sleep_calls[1] > sleep_calls[0]
 
 
+@requires(coingecko, "_fetch_with_retry")
 async def test_fetch_gives_up_after_max_retries():
     """Persistent 429s return an error dict instead of raising."""
     mock_client = AsyncMock()
@@ -92,6 +99,7 @@ async def test_fetch_gives_up_after_max_retries():
     assert result == {"_error": "HTTP 429"}
 
 
+@requires(coingecko, "_fetch_with_retry")
 async def test_fetch_does_not_retry_other_http_errors():
     """Non-429 HTTP errors fail immediately without retries."""
     mock_client = AsyncMock()
@@ -123,6 +131,7 @@ _DERIVATIVES_DATA = [
 ]
 
 
+@requires(coingecko, "_fetch_with_retry")
 async def test_funding_rate_annualized_uses_percent_units():
     """funding_rate from CoinGecko is already in percent — annualization must not multiply by 100 again."""
     mock_client = AsyncMock()
@@ -141,6 +150,7 @@ async def test_funding_rate_annualized_uses_percent_units():
     assert btc["avg_funding_annualized_pct"] < 200
 
 
+@requires(coingecko, "_fetch_with_retry")
 async def test_funding_signal_formats_percent_correctly():
     """Crowded-long signal shows '0.1000%/8h', not '10.0000%/8h'."""
     mock_client = AsyncMock()
@@ -156,6 +166,7 @@ async def test_funding_signal_formats_percent_correctly():
     assert "0.1000%/8h" in signal
 
 
+@requires(coingecko, "_fetch_with_retry")
 async def test_dominance_falls_back_to_coinpaprika_on_429():
     """When CoinGecko 429s, dominance is rebuilt from keyless CoinPaprika."""
     paprika_global = {"market_cap_usd": 2_000_000_000_000, "bitcoin_dominance_percentage": 55.0}
