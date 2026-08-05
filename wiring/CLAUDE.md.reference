@@ -1,0 +1,237 @@
+# TerminalQ
+
+Bloomberg-style financial terminal for portfolio intelligence, built as a Claude Code MCP plugin.
+
+## Quick Start
+
+```bash
+./setup.sh                  # Install deps, create ~/.terminalq/, check API keys
+/tq-setup                   # Interactive onboarding — obtain and configure API keys
+```
+
+**First time?** Run `./setup.sh` first to install dependencies, then run `/tq-setup` inside Claude Code for guided API key configuration.
+
+## Private Data Storage
+
+**Your personal financial data is stored in `~/.terminalq/` — outside the git repo and never committed.**
+
+```
+~/.terminalq/                          <-- YOUR private data (gitignored, local only)
+  portfolio-holdings.md                   Portfolio positions by account
+  rsu-schedule.md                         RSU vesting schedule
+  accounts.md                             Account inventory
+  watchlist.md                            Symbols you track
+  etf-classifications.md                  ETF-to-asset-class mapping
+```
+
+- Run `./setup.sh` to create `~/.terminalq/` with starter templates
+- Run `/tq-ingest holdings` to import brokerage data interactively
+- The repo's `reference/` directory contains only `.example.md` templates
+- `PORTFOLIO_DIR` env var can override the data location if needed
+
+## Architecture
+
+- **MCP Server**: `src/terminalq/server.py` — 84 FastMCP tools, JSON over stdio
+- **Providers** (`src/terminalq/providers/`):
+  - `finnhub.py` — Quotes, profiles, news, earnings, analyst ratings, economic calendar (60 req/min)
+  - `historical.py` — Historical OHLCV, dividends (Yahoo Finance via yfinance)
+  - `edgar.py` — Financial statements, SEC filings, insider transactions (Form 4), 13F holdings (EDGAR XBRL, 10 req/sec)
+  - `fred.py` — Economic indicators, macro dashboard, forex rates, net liquidity, real yields & breakevens (FRED API, 120 req/min)
+  - `technical.py` — SMA, EMA, RSI, MACD, Bollinger, ATR (computed)
+  - `screener.py` — S&P 500 stock screener (cached CSV + profiles)
+  - `coingecko.py` — Cryptocurrency prices (CoinGecko, free, 30 req/min, 429 backoff)
+  - `defillama.py` — DeFi TVL across chains + stablecoin supply (DefiLlama, free, no key)
+  - `cftc.py` — Commitment of Traders futures positioning (CFTC Socrata API, free, no key)
+  - `etf_flows.py` — Daily spot Bitcoin ETF flows (Farside Investors scrape, free, no key)
+  - `fed_calendar.py` — FOMC meeting dates (federalreserve.gov scrape, free, no key)
+  - `fred.py` also exposes `get_release_calendar` — upcoming high-impact US releases (CPI/NFP/PCE/GDP/PPI/retail/JOLTS) from FRED's official schedule; the economic-calendar tool falls back to FRED releases + FOMC dates when Finnhub's premium calendar 403s
+  - `mempool.py` — BTC mempool fees & congestion (mempool.space, free, no key)
+  - `climate.py` — commodity-production weather/climate risk watch (NASA POWER, free, no key) + a real historical super-El-Nino stress backtest (Yahoo Finance) for the linked tickers
+  - `stress_backtest.py` — generalized metric stress-period backtest (Phase 1: VIX, high-yield credit, CPI) — real historical price moves when a metric crossed its warning threshold, registry designed to extend to more metrics
+  - `retail_sentiment.py` — AAII weekly survey (scrape) + SPY options put/call ratio (Yahoo)
+  - `market_data.py` — yfinance dashboards: market overview, style box, fed funds futures path, equity sentiment
+  - `cycle.py` — Business-cycle & recession dashboard: Sahm rule, yield curves, claims trend, NFCI, GDPNow (FRED)
+  - `sectors.py` — Sector rotation: 11 SPDR sector ETFs vs SPY, cyclical-vs-defensive spread (Yahoo, free)
+  - `valuation.py` — Shiller CAPE + earnings yield (multpl.com scrape) + equity risk premium vs 10y (FRED)
+  - `search.py` — Web search: DuckDuckGo default (keyless), Brave Search upgrade when key set, auto-fallback
+  - `portfolio.py` — Portfolio/watchlist parser (reads from `~/.terminalq/`)
+- **Analytics** (`src/terminalq/analytics/`):
+  - `risk.py` — Sharpe, Sortino, max drawdown, VaR, beta vs SPY
+  - `allocation.py` — Asset class breakdown, concentration risk
+  - `correlation.py` — Cross-asset correlation matrix (equities, bonds, commodities, dollar, crypto)
+  - `correlation_regime.py` — Recent-vs-baseline correlation shift (diversification-fails monitor)
+  - `percentiles.py` — Historical percentile context: ranks any metric vs its full history
+  - `regime_history.py` — Regime-score calibration: realized forward returns by score band (reads the snapshot store)
+  - `prediction_grader.py` — Settles due predictions in the ledger against actual prices
+  - `backtest_utils.py` — shared historical-window ticker-return helper (Yahoo Finance) used by both climate.py and stress_backtest.py stress backtests
+  - `fred_archive.py` — permanent local archive of FRED series history under `~/.terminalq/history/fred_archive/`; every `get_series_history` call merges live data into it so a future vendor-license restriction (like the 2026 ICE BofA credit-spread one — see below) can't erase history already banked
+- **Charts**: `src/terminalq/charts.py` — Sparklines, line/candlestick charts, heatmaps, allocation bars
+- **Report intelligence**: `history.py` (append-only snapshot + prediction store under `~/.terminalq/history/`), `backfill.py` (best-effort seed from existing reports); providers `reports.py` (recent-report loader) and `event_scenarios.py` (reaction-function scaffolding)
+- **Infrastructure**: `cache.py`, `rate_limiter.py`, `logging_config.py`, `config.py`
+- **Commands**: `commands/` — 36 slash commands
+- **Tests**: `tests/` — 496 tests (pytest)
+- **Docs**: `docs/` — API reference, provider/command guides, config reference
+
+## API Keys
+
+| Key | Required | Free Tier | Env Variable |
+|-----|----------|-----------|-------------|
+| Finnhub | Yes | 60 calls/min | `FINNHUB_API_KEY` |
+| FRED | Yes | 120 calls/min | `FRED_API_KEY` |
+| Brave Search | Optional (DuckDuckGo used when unset) | 2000 calls/mo | `BRAVE_API_KEY` |
+| DuckDuckGo | No key needed | Via ddgs package | -- |
+| SEC EDGAR | No key needed | User-Agent header | `SEC_USER_AGENT` |
+| Yahoo Finance | No key needed | Via yfinance | -- |
+| CoinGecko | No key needed | 30 calls/min | -- |
+| DefiLlama | No key needed | 30 calls/min | -- |
+| CFTC | No key needed | Unauthenticated Socrata API | -- |
+| Farside | No key needed | HTML scrape (graceful failure if blocked) | -- |
+
+Keys are loaded from `~/.env` via python-dotenv (`override=True`).
+
+## MCP Tools (81)
+
+**Quotes & Market Data:**
+- `terminalq_get_quote(symbol)` — Real-time quote
+- `terminalq_get_quotes_batch(symbols)` — Parallel batch quotes
+- `terminalq_get_historical(symbol, period, interval)` — OHLCV price data
+- `terminalq_get_dividends(symbol, years)` — Dividend history + yield
+
+**Portfolio:**
+- `terminalq_get_portfolio()` — Static holdings from `~/.terminalq/portfolio-holdings.md`
+- `terminalq_get_portfolio_live()` — Holdings with live prices + daily P&L
+- `terminalq_get_rsu_schedule()` — RSU vesting schedule from `~/.terminalq/rsu-schedule.md`
+- `terminalq_get_watchlist()` — Watchlist with live quotes
+- `terminalq_get_risk_metrics(period)` — Sharpe, Sortino, VaR, beta, max drawdown
+- `terminalq_get_allocation()` — Asset class breakdown + concentration risk
+
+**Research & Fundamentals:**
+- `terminalq_get_company_profile(symbol)` — Company overview
+- `terminalq_get_news(symbol, days)` — Company news
+- `terminalq_get_earnings(symbol)` — EPS history + estimates
+- `terminalq_get_analyst_ratings(symbol)` — Buy/Hold/Sell consensus + price targets
+- `terminalq_get_financials(symbol, statement, periods)` — SEC financial statements
+- `terminalq_get_filings(symbol, filing_type, limit)` — SEC filing search
+- `terminalq_get_technicals(symbol)` — SMA/EMA/RSI/MACD/Bollinger/ATR
+- `terminalq_get_insider_transactions(symbol, limit)` — SEC Form 4 insider buys/sells + net summary
+- `terminalq_get_13f_holdings(institution, limit)` — Latest 13F top holdings for a tracked institution (berkshire, bridgewater, scion, ark, pershing_square)
+
+**Charts & Visualization:**
+- `terminalq_chart_price(symbol, period, chart_type)` — Line or candlestick chart
+- `terminalq_chart_comparison(symbols, period)` — Multi-symbol % return overlay
+- `terminalq_chart_allocation()` — Portfolio allocation bar chart
+- `terminalq_chart_yield_curve()` — US Treasury yield curve
+- `terminalq_chart_sector_heatmap()` — S&P 500 sector performance
+
+**Economics, Crypto & Search:**
+- `terminalq_get_economic_indicator(indicator, limit)` — FRED data (gdp, cpi, fed_funds, etc.)
+- `terminalq_get_macro_dashboard()` — 11 key economic indicators
+- `terminalq_get_forex(pair)` — Currency exchange rates (FRED)
+- `terminalq_get_crypto(symbol)` — Cryptocurrency quote (CoinGecko)
+- `terminalq_get_crypto_batch(symbols)` — Batch crypto quotes
+- `terminalq_get_economic_calendar(days)` — Upcoming economic events (Finnhub; free fallback = FRED high-impact releases + FOMC dates)
+- `terminalq_screen_stocks(sector, min_market_cap, max_market_cap, limit)` — S&P 500 screener
+- `terminalq_web_search(query, count)` — Web search (DuckDuckGo default; Brave when key set, with auto-fallback)
+
+**Macro & Cross-Asset:**
+- `terminalq_get_liquidity()` — Fed balance sheet, reverse repo, TGA — net liquidity proxy for risk-asset regime
+- `terminalq_get_rates_dashboard()` — Treasury yields, real yields (TIPS), and breakeven inflation expectations
+- `terminalq_get_defi_overview()` — Total DeFi TVL, top chains, and TVL trend signal (DefiLlama)
+- `terminalq_get_cot_report(market)` — CFTC Commitment of Traders positioning (commercial/large-spec/small-spec, WoW change)
+- `terminalq_get_correlation_matrix(symbols)` — Cross-asset correlation matrix (default: stocks/bonds/commodities/dollar/crypto)
+- `terminalq_get_fed_path()` — Market-implied Fed policy path from ZQ fed funds futures (FedWatch equivalent)
+- `terminalq_get_equity_sentiment()` — VIX term structure (VIX/VIX3M), CBOE SKEW, RSP/SPY breadth
+- `terminalq_get_stablecoins()` — Total stablecoin supply, top stables, supply growth trend (crypto dry powder)
+- `terminalq_get_btc_etf_flows(days)` — Daily spot Bitcoin ETF flows in $M (institutional demand gauge)
+- `terminalq_get_cycle_position()` — Recession dashboard: Sahm rule, 10y-2y/10y-3m curves, claims trend, NFCI, GDPNow → one verdict
+- `terminalq_get_sector_rotation()` — 11 sector ETFs vs SPY (1/3/6mo relative), leaders/laggards, cyclical-vs-defensive spread
+- `terminalq_get_market_valuation()` — Shiller CAPE with percentile vs ~150y history, S&P earnings yield, equity risk premium
+- `terminalq_get_metric_context(indicator)` — Any FRED metric ranked vs its full history (percentile, min/max/median)
+- `terminalq_get_btc_mempool()` — BTC fee tiers (sat/vB), mempool backlog, congestion signal (on-chain demand gauge)
+- `terminalq_get_retail_sentiment()` — AAII bullish/neutral/bearish + bull-bear spread trend; SPY put/call ratio
+- `terminalq_get_prediction_markets(topic)` — Polymarket real-money event odds (keyless) — cross-check on model-implied Fed path / recession odds
+- `terminalq_get_dealer_gamma(symbol)` — dealer-gamma options positioning: call/put walls, net GEX sign (free Yahoo chains, estimate)
+- `terminalq_get_correlation_regime(symbols)` — recent-vs-baseline cross-asset correlation shift (diversification-fails monitor)
+- `terminalq_get_rsu_tax_analysis(marginal_rate, ltcg_rate)` — RSU vest tax estimates + sell-vs-hold framing (local data; not tax advice)
+- `terminalq_get_climate_risk_watch()` — weather/climate production-risk watch across commodity regions (grains, softs, copper/lithium, iron ore, Permian oil/gas); NASA POWER, free, no key
+- `terminalq_get_climate_stress_backtest(period)` — real historical price moves for the climate-watch tickers during a verified past super El Nino ("el_nino_2015_16" or "el_nino_1997_98")
+- `terminalq_get_metric_stress_backtest(event)` — generalized version of the above for non-climate metrics (Phase 1: VIX panic, HY credit stress, CPI surge); registry designed to extend to more metrics
+
+**Report Intelligence (history-backed, local store at `~/.terminalq/history/`):**
+- `terminalq_record_snapshot(...)` — append one FR snapshot (regime scores + headline metrics); called by the FR workflow each run
+- `terminalq_get_regime_history(forward_days)` — regime-score calibration: realized forward returns grouped by score band (honest about small samples)
+- `terminalq_log_prediction(claim, symbol, direction, horizon_days, baseline)` — log a dated, falsifiable call to the ledger
+- `terminalq_grade_predictions()` — settle due predictions vs actual prices; running accuracy/track record
+- `terminalq_load_recent_reports(n)` — key sections of recent FR reports + snapshot trend (feeds the weekly digest)
+- `terminalq_get_event_scenarios(days)` — upcoming releases anchored to current readings, for pre-computing the reaction function
+- `terminalq_speak(text, voice_name)` — read a briefing aloud via the Mac's built-in `say` (free, no key)
+
+## Slash Commands (39)
+
+| Command | Description |
+|---------|-------------|
+| `/tq-setup` | Interactive onboarding — configure API keys and data directory |
+| `/tq-quote SYMBOL` | Real-time quote with portfolio context |
+| `/tq-portfolio` | All holdings with live prices, grouped by account |
+| `/tq-news [SYMBOL]` | News for a ticker or top portfolio holdings |
+| `/tq-rsu` | RSU vesting schedule + current employer stock price |
+| `/tq-dividends SYMBOL` | Dividend history, yield, projected income |
+| `/tq-earnings SYMBOL` | Earnings history, beat rate, EPS trend |
+| `/tq-historical SYMBOL [PERIOD]` | Historical price data |
+| `/tq-financials SYMBOL [TYPE]` | SEC financial statements |
+| `/tq-filings SYMBOL [TYPE]` | SEC filing search |
+| `/tq-technicals SYMBOL` | Technical analysis report |
+| `/tq-economy [INDICATOR]` | Economic indicator or full macro dashboard |
+| `/tq-screen [CRITERIA]` | S&P 500 stock screener |
+| `/tq-chart SYMBOL [PERIOD] [TYPE]` | Price chart (line or candlestick) |
+| `/tq-compare SYM1,SYM2,SYM3` | Multi-symbol performance comparison |
+| `/tq-allocation` | Portfolio allocation visualization |
+| `/tq-yield-curve` | US Treasury yield curve |
+| `/tq-ratings SYMBOL` | Analyst ratings + price targets |
+| `/tq-watchlist` | Watchlist with live quotes |
+| `/tq-forex [PAIR]` | Forex rates (e.g., eurusd) |
+| `/tq-crypto [SYMBOL]` | Crypto prices (BTC, ETH, SOL...) |
+| `/tq-events` | Upcoming economic events calendar |
+| `/tq-search QUERY` | Web search for financial research |
+| `/tq-risk` | Portfolio risk metrics |
+| `/tq-ingest [TYPE]` | Import brokerage data into `~/.terminalq/` |
+| `/tq-predict [TOPIC]` | Prediction-market odds (Polymarket) as a cross-check on model reads |
+| `/tq-gamma [SYMBOL]` | Dealer-gamma options positioning — call/put walls, net GEX sign |
+| `/tq-corr-regime [SYMBOLS]` | Correlation-regime monitor — is diversification breaking? |
+| `/tq-rsu-tax [RATE]` | RSU vest tax-timing estimates and the sell-vs-hold decision |
+| `/tq-climate` | Climate/weather production-risk watch across commodity regions |
+| `/tq-climate-backtest [PERIOD]` | Real historical price moves for climate tickers during a past super El Nino |
+| `/tq-stress-backtest EVENT` | Generalized metric stress backtest (VIX, credit, CPI) — real historical price moves at a past warning-threshold crossing |
+| `/tq-week [N]` | Weekly digest — narrate how the regime evolved across recent reports |
+| `/tq-event-scenarios [DAYS]` | Pre-compute the reaction function for this week's high-impact events |
+| `/tq-brief [VOICE]` | Spoken market briefing via macOS `say` — listen instead of read |
+| `/tq-graph-reports` | Build a knowledge graph of the FR report archive (graphify) to find patterns |
+
+## Error Convention
+
+All tools return errors as `{"error": "message", "symbol": "SYM", "source": "provider_name"}`. Providers never raise exceptions — they catch and return error dicts.
+
+## Code Conventions
+
+These conventions were established from code review feedback and must be followed:
+
+- **No magic constants.** API limits, budgets, and thresholds go in `config.py` (e.g., `BRAVE_MONTHLY_LIMIT`). Never duplicate a constant across files.
+- **UTC for all timestamps from external APIs.** Use `datetime.fromtimestamp(ts, tz=timezone.utc)`, not naive `datetime.fromtimestamp(ts)` which uses local timezone and shifts dates.
+- **Introspection tools must not audit themselves.** `terminalq_get_audit_log` and `terminalq_get_usage_stats` must NOT use the `@audited` decorator — it creates self-referential log pollution.
+- **Async locks for shared state.** `usage_tracker.py` uses `asyncio.Lock` per provider for all read-modify-write operations (`increment_daily`, `record_payload_size`, `increment_and_check`). Never do separate check-then-act on usage files — use `increment_and_check()` for atomic budget enforcement.
+- **Audit decorator captures all args.** The `@audited` wrapper uses `inspect.signature` + `bind()` to log both positional and keyword arguments. Do not rely on `kwargs` alone.
+- **Hooks must exit non-zero to block.** Claude Code Stop hooks only enforce when the script exits non-zero. Use `exit 2` for quality gate failures.
+- **Output contracts.** All 6 skills reference `docs/output-contracts.md`. Every financial skill output must include a **Data Freshness** table and **Disclaimer**. See the contracts doc for required sections per skill.
+- **Plain-language interpretation (applies to ALL outputs, not just skills).** Every metric or number presented to the user — in any report, demo, or ad-hoc answer — must be paired with a one-sentence plain-English explanation of what it means and whether it's good/bad/neutral, and tied back into an overall narrative. No raw data dumps. See `docs/output-contracts.md` for the full rule.
+- **Screener completeness.** `is_complete` in screener results compares `matches_after_all` against `matches_after_sector` (not `len(results)`) to correctly flag when the profile fetch threshold caused partial results.
+- **FRED vendor-licensed series can silently lose history.** Confirmed 2026-07-06: FRED's ICE BofA credit-spread series (`BAMLC0A0CM`, `BAMLH0A0HYM2`, `BAMLH0A1HYBB`, `BAMLH0A2HYB`, `BAMLH0A3HYC`) now serve only ~3 years via both the API and the raw CSV export (an ICE Data license change), confirmed by direct query — `observation_start` returned `2023-07-07` for all five, down from 1996. Checked all 78 FRED series TerminalQ tracks; only these 5 (all ICE-licensed) were affected — the other 73 are direct BLS/BEA/Fed/Treasury publications with no similar exposure today, but that could change for any series in the future. Fix: `analytics/fred_archive.py` permanently archives every `get_series_history` call's live values locally under `~/.terminalq/history/fred_archive/`, merged with a one-time recovered seed where one exists (`BAMLH0A0HYM2_seed.json` — full 1996-2025 history recovered via an archive.org Wayback Machine cache of FRED's CSV export dated 2025-11-04, before the restriction took effect; the other 4 series' earliest available Wayback snapshot was already post-restriction, so their pre-2023 history is not recoverable from any free source found so far). Percentile claims (`get_metric_context`) now report both `history_start` (the merged/archived range) and `live_api_start_date` (what FRED's API alone would give today) so report text can be honest about which one backs a given percentile.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

@@ -1,0 +1,3296 @@
+diff --git a/docs/output-contracts.md b/docs/output-contracts.md
+index e69b7b1..33c5669 100644
+--- a/docs/output-contracts.md
++++ b/docs/output-contracts.md
+@@ -2,6 +2,23 @@
+ 
+ Every skill output MUST conform to one of the contracts below. Contracts define **required sections** — each section must appear as a level-2 or level-3 markdown heading. Optional sections are marked. Every contract includes a mandatory **Data Freshness** footer and **Disclaimer**.
+ 
++All outputs must also follow the **Plain-Language Interpretation** rule below — this is the most important contract and applies regardless of which report type is used.
++
++---
++
++## Plain-Language Interpretation (applies to ALL outputs)
++
++The goal of every report is for the reader to walk away understanding **what the numbers mean**, not just what the numbers are. A wall of figures with no interpretation has failed, even if every number is accurate.
++
++For every metric or data point presented:
++
++1. **State the number**, then **say what it means in plain English** — one short sentence, no jargon. If a technical term is unavoidable (RSI, breakeven inflation, 13F, COT, basis points), define it briefly the first time it's used.
++2. **Say whether it's good, bad, neutral, or "depends"** for the reader's situation, and why — don't make the reader infer the implication themselves.
++3. **Connect it to the bigger picture** — how does this metric relate to the other metrics in the report? Avoid presenting numbers as isolated facts.
++4. **Avoid raw data dumps.** Tables are fine for reference, but every table or block of numbers needs accompanying interpretation text — never let a table be the entire section.
++5. **Prefer everyday language over finance jargon**: "money is getting tighter" instead of "liquidity conditions are contracting"; "investors are nervous" instead of "risk-off sentiment is elevated." Use precise terms when needed but always pair them with a plain-English translation.
++6. **End with synthesis**, not just a list — tie the individual findings together into one coherent story so the reader understands the overall picture, not just a series of disconnected data points.
++
+ ---
+ 
+ ## Market Briefing
+diff --git a/skills/trade-research/SKILL.md b/skills/trade-research/SKILL.md
+index 8f7d3c5..6fedd8c 100644
+--- a/skills/trade-research/SKILL.md
++++ b/skills/trade-research/SKILL.md
+@@ -27,11 +27,12 @@ Provide comprehensive investment decision support for "$ARGUMENTS" by calling th
+ 8. `terminalq_get_news(symbol, 14)` — recent news
+ 9. `terminalq_get_earnings(symbol)` — earnings history
+ 10. `terminalq_chart_price(symbol, "1y", "line")` — price chart
++11. `terminalq_get_insider_transactions(symbol, 10)` — recent Form 4 insider buying/selling
+ 
+ **Round 2 — Portfolio Context (parallel):**
+ 
+-11. `terminalq_get_allocation()` — current portfolio allocation
+-12. `terminalq_get_risk_metrics("1y")` — portfolio risk baseline
++12. `terminalq_get_allocation()` — current portfolio allocation
++13. `terminalq_get_risk_metrics("1y")` — portfolio risk baseline
+ 
+ After gathering all data, produce an investment decision brief following the **Trade Decision Brief** contract in `docs/output-contracts.md`:
+ 
+@@ -39,6 +40,10 @@ After gathering all data, produce an investment decision brief following the **T
+ 
+ - Bull case (3-4 data-driven points from financials, growth, and catalysts)
+ - Bear case (3-4 risk factors from financials, technicals, and news)
++- Insider Activity — net insider buying/selling over the lookback period (`net_shares`, `net_value` from `terminalq_get_insider_transactions`), in plain English:
++  - Net buying, especially by multiple executives, is a bullish signal worth weighting in the bull case — insiders have non-public visibility into the business and are putting their own money in
++  - Net selling is common and often just diversification or tax planning, so don't over-read a single sale — but a cluster of sales across several executives in a short window is a caution flag worth a bear-case mention
++  - No recent activity is neutral — note it and move on
+ - One-line thesis summary
+ 
+ **Valuation Assessment:**
+@@ -93,6 +98,7 @@ After gathering all data, produce an investment decision brief following the **T
+ | Allocation unavailable | `terminalq_get_allocation` fails | Skip Portfolio Fit Analysis section; note it in output |
+ | Risk metrics fail | `terminalq_get_risk_metrics` errors | Skip portfolio risk baseline comparison; size position conservatively |
+ | Technicals fail | `terminalq_get_technicals` errors | Skip Technical Entry Point; recommend limit orders at recent support levels |
++| Insider transactions fail | `terminalq_get_insider_transactions` errors | Omit the Insider Activity bullet from Investment Thesis; note in Data Freshness that insider data was unavailable |
+ | All data sources fail | Multiple critical tools return errors | Abort and inform user that insufficient data is available for a decision |
+ 
+ ## When Not to Use
+diff --git a/src/terminalq/providers/coingecko.py b/src/terminalq/providers/coingecko.py
+index a850c40..d3f82a7 100644
+--- a/src/terminalq/providers/coingecko.py
++++ b/src/terminalq/providers/coingecko.py
+@@ -1,10 +1,28 @@
+-"""CoinGecko data provider — cryptocurrency quotes and batch pricing."""
++"""CoinGecko data provider — cryptocurrency quotes, batch pricing, and analytics."""
++
++import asyncio
+ 
+ import httpx
+ 
+ from terminalq import cache
+-from terminalq.config import CACHE_TTL_CRYPTO, COINGECKO_RATE_LIMIT
++from terminalq.ext_settings import (
++    CACHE_TTL_CRYPTO,
++    CACHE_TTL_CRYPTO_DEEP,
++    CACHE_TTL_CRYPTO_DERIVATIVES,
++    CACHE_TTL_CRYPTO_OVERVIEW,
++    CACHE_TTL_CRYPTO_TRENDING,
++    COINGECKO_MAX_RETRIES,
++    COINGECKO_RATE_LIMIT,
++    COINGECKO_RETRY_BASE_DELAY,
++    CRYPTO_ALTCOIN_SEASON_THRESHOLD,
++    CRYPTO_FDV_DILUTION_WARNING,
++    CRYPTO_FUNDING_CROWDED_LONG,
++    CRYPTO_FUNDING_CROWDED_SHORT,
++    FEAR_GREED_EXTREME_FEAR,
++    FEAR_GREED_EXTREME_GREED,
++)
+ from terminalq.logging_config import log
++from terminalq.providers import hyperliquid, yahoo_crypto
+ from terminalq.rate_limiter import RateLimiter
+ 
+ BASE_URL = "https://api.coingecko.com/api/v3"
+@@ -14,6 +32,10 @@ _rate_limiter = RateLimiter(calls_per_minute=COINGECKO_RATE_LIMIT)
+ SYMBOL_TO_ID = {
+     "BTC": "bitcoin",
+     "ETH": "ethereum",
++    "BNB": "binancecoin",
++    "TRX": "tron",
++    "TON": "the-open-network",
++    "XLM": "stellar",
+     "SOL": "solana",
+     "ADA": "cardano",
+     "DOT": "polkadot",
+@@ -49,22 +71,36 @@ def _resolve_id(symbol: str) -> str:
+ 
+ 
+ async def _fetch(client: httpx.AsyncClient, url: str, params: dict) -> dict | list:
+-    """Rate-limited HTTP GET with error handling."""
+-    await _rate_limiter.acquire()
+-    log.debug("CoinGecko request: %s params=%s", url, params)
+-    try:
+-        resp = await client.get(url, params=params, timeout=10)
+-        resp.raise_for_status()
+-        return resp.json()
+-    except httpx.TimeoutException:
+-        log.warning("CoinGecko timeout: %s %s", url, params)
+-        return {"_error": "Request timed out"}
+-    except httpx.HTTPStatusError as e:
+-        log.warning("CoinGecko HTTP %d: %s %s", e.response.status_code, url, params)
+-        return {"_error": f"HTTP {e.response.status_code}"}
+-    except httpx.ConnectError:
+-        log.error("CoinGecko connection failed: %s", url)
+-        return {"_error": "Connection failed"}
++    """Rate-limited HTTP GET with error handling and 429 backoff."""
++    for attempt in range(COINGECKO_MAX_RETRIES):
++        await _rate_limiter.acquire()
++        log.debug("CoinGecko request: %s params=%s", url, params)
++        try:
++            resp = await client.get(url, params=params, timeout=10)
++            resp.raise_for_status()
++            return resp.json()
++        except httpx.TimeoutException:
++            log.warning("CoinGecko timeout: %s %s", url, params)
++            return {"_error": "Request timed out"}
++        except httpx.HTTPStatusError as e:
++            status = e.response.status_code
++            if status == 429 and attempt < COINGECKO_MAX_RETRIES - 1:
++                delay = COINGECKO_RETRY_BASE_DELAY * (2**attempt)
++                log.warning(
++                    "CoinGecko 429 — backing off %.1fs (attempt %d/%d): %s",
++                    delay,
++                    attempt + 1,
++                    COINGECKO_MAX_RETRIES,
++                    url,
++                )
++                await asyncio.sleep(delay)
++                continue
++            log.warning("CoinGecko HTTP %d: %s %s", status, url, params)
++            return {"_error": f"HTTP {status}"}
++        except httpx.ConnectError:
++            log.error("CoinGecko connection failed: %s", url)
++            return {"_error": "Connection failed"}
++    return {"_error": "HTTP 429"}
+ 
+ 
+ async def get_crypto_quote(symbol: str) -> dict:
+@@ -97,6 +133,11 @@ async def get_crypto_quote(symbol: str) -> dict:
+         )
+ 
+     if isinstance(data, dict) and "_error" in data:
++        # CoinGecko unreachable — recover the spot quote from Yahoo Finance.
++        fallback = await yahoo_crypto.fetch_crypto_quote(symbol)
++        if fallback is not None:
++            log.info("CoinGecko quote failed for %s — served Yahoo fallback", symbol.upper())
++            return fallback
+         return {"symbol": symbol.upper(), "error": data["_error"], "source": "coingecko"}
+ 
+     market = data.get("market_data", {})
+@@ -170,8 +211,13 @@ async def get_crypto_batch(symbols: list[str]) -> list[dict]:
+         )
+ 
+     if isinstance(data, dict) and "_error" in data:
+-        for symbol in uncached:
+-            results[symbol] = {"symbol": symbol.upper(), "error": data["_error"], "source": "coingecko"}
++        # CoinGecko unreachable — recover each spot quote from Yahoo Finance in parallel.
++        log.info("CoinGecko batch failed (%s) — trying Yahoo fallback for %d symbols", data["_error"], len(uncached))
++        fallbacks = await asyncio.gather(*[yahoo_crypto.fetch_crypto_quote(s) for s in uncached])
++        for symbol, fb in zip(uncached, fallbacks):
++            results[symbol] = (
++                fb if fb is not None else {"symbol": symbol.upper(), "error": data["_error"], "source": "coingecko"}
++            )
+         return [results.get(s, {"symbol": s.upper(), "error": "Not found", "source": "coingecko"}) for s in symbols]
+ 
+     # Build a lookup from coin_id → data
+@@ -211,3 +257,626 @@ async def get_crypto_batch(symbols: list[str]) -> list[dict]:
+         results[symbol] = result
+ 
+     return [results.get(s, {"symbol": s.upper(), "error": "Not found", "source": "coingecko"}) for s in symbols]
++
++
++# ---------------------------------------------------------------------------
++# Analytics — global market, deep coin profiles, dominance, trending, derivatives, screener
++# ---------------------------------------------------------------------------
++
++_ALTERNATIVE_ME_URL = "https://api.alternative.me/fng/"
++
++# Major coins to highlight in derivatives dashboard
++_DERIVATIVES_FOCUS = {"BTC", "ETH", "SOL", "XRP", "BNB"}
++
++
++async def _fetch_alternative_me(limit: int) -> dict | list:
++    """Fetch Fear & Greed data from Alternative.me (no rate limit needed — separate service)."""
++    try:
++        async with httpx.AsyncClient() as client:
++            resp = await client.get(_ALTERNATIVE_ME_URL, params={"limit": limit, "format": "json"}, timeout=10)
++            resp.raise_for_status()
++            return resp.json()
++    except Exception as e:
++        log.warning("Alternative.me fetch failed: %s", e)
++        return {"_error": str(e)}
++
++
++async def get_crypto_market_overview() -> dict:
++    """Global crypto market: total market cap, dominance, volume, and Fear & Greed index."""
++    cache_key = "coingecko_market_overview"
++    cached = cache.get(cache_key)
++    if cached:
++        return cached
++
++    async with httpx.AsyncClient() as client:
++        global_data = await _fetch(client, f"{BASE_URL}/global", {})
++
++    fg_data = await _fetch_alternative_me(7)
++
++    if isinstance(global_data, dict) and "_error" in global_data:
++        return {"error": global_data["_error"], "source": "coingecko"}
++
++    gd = global_data.get("data", {})
++    mc = gd.get("total_market_cap", {}).get("usd")
++    vol = gd.get("total_volume", {}).get("usd")
++    mc_pct = gd.get("market_cap_percentage", {})
++    mc_change = gd.get("market_cap_change_percentage_24h_usd")
++
++    stable_dom = sum(mc_pct.get(s, 0) for s in ("usdt", "usdc", "busd", "dai"))
++
++    fg_entries = []
++    if isinstance(fg_data, dict) and "data" in fg_data:
++        for entry in fg_data["data"]:
++            val = int(entry.get("value", 0))
++            fg_entries.append(
++                {"value": val, "classification": entry.get("value_classification"), "date": entry.get("timestamp")}
++            )
++
++    current_fg = fg_entries[0] if fg_entries else {}
++    fg_val = current_fg.get("value")
++    if fg_val is not None:
++        if fg_val <= FEAR_GREED_EXTREME_FEAR:
++            current_fg["signal"] = "extreme_fear — historically strong buy zone"
++        elif fg_val <= 40:
++            current_fg["signal"] = "fear"
++        elif fg_val <= 60:
++            current_fg["signal"] = "neutral"
++        elif fg_val < FEAR_GREED_EXTREME_GREED:
++            current_fg["signal"] = "greed"
++        else:
++            current_fg["signal"] = "extreme_greed — historically strong sell zone"
++
++    result = {
++        "total_market_cap_usd": mc,
++        "total_volume_24h_usd": vol,
++        "market_cap_change_24h_pct": mc_change,
++        "market_cap_signal": "expanding" if (mc_change or 0) > 0 else "contracting",
++        "dominance": {
++            "btc": round(mc_pct.get("btc", 0), 2),
++            "eth": round(mc_pct.get("eth", 0), 2),
++            "stablecoins_proxy": round(stable_dom, 2),
++        },
++        "fear_greed_current": current_fg,
++        "fear_greed_7d": fg_entries,
++        "active_cryptocurrencies": gd.get("active_cryptocurrencies"),
++        "note": "Stablecoin dominance = USDT+USDC+BUSD+DAI. Rising = cash rotation out of crypto.",
++        "source": "coingecko + alternative.me",
++    }
++    cache.set(cache_key, result, CACHE_TTL_CRYPTO_OVERVIEW)
++    return result
++
++
++async def get_crypto_deep(symbol: str) -> dict:
++    """Full coin profile: supply metrics, FDV dilution risk, all-timeframe returns, community, and developer activity."""
++    coin_id = _resolve_id(symbol)
++    cache_key = f"coingecko_deep_{coin_id}"
++    cached = cache.get(cache_key)
++    if cached:
++        return cached
++
++    async with httpx.AsyncClient() as client:
++        data = await _fetch(
++            client,
++            f"{BASE_URL}/coins/{coin_id}",
++            {
++                "localization": "false",
++                "tickers": "false",
++                "community_data": "true",
++                "developer_data": "true",
++                "sparkline": "false",
++            },
++        )
++
++    if isinstance(data, dict) and "_error" in data:
++        return {"symbol": symbol.upper(), "error": data["_error"], "source": "coingecko"}
++
++    md = data.get("market_data", {})
++    cd = data.get("community_data", {})
++    dd = data.get("developer_data", {})
++
++    price = md.get("current_price", {}).get("usd")
++    mc = md.get("market_cap", {}).get("usd")
++    fdv = md.get("fully_diluted_valuation", {}).get("usd")
++    circ = md.get("circulating_supply")
++    total = md.get("total_supply")
++
++    fdv_ratio = round(fdv / mc, 2) if fdv and mc else None
++    supply_pct = round(circ / total * 100, 1) if circ and total else None
++
++    if fdv_ratio is not None:
++        if fdv_ratio > CRYPTO_FDV_DILUTION_WARNING:
++            dilution_signal = (
++                f"HIGH DILUTION RISK — only {supply_pct}% of tokens circulating, FDV is {fdv_ratio}× market cap"
++            )
++        elif fdv_ratio > 1.5:
++            dilution_signal = f"moderate dilution risk — {supply_pct}% circulating"
++        else:
++            dilution_signal = "low dilution risk — most supply already circulating"
++    else:
++        dilution_signal = None
++
++    commits = dd.get("commit_count_4_weeks") or 0
++    dev_signal = "active" if commits > 10 else ("low activity" if commits > 0 else "no recent commits")
++
++    result = {
++        "symbol": symbol.upper(),
++        "name": data.get("name"),
++        "price_usd": price,
++        "supply": {
++            "circulating": circ,
++            "total": total,
++            "max": md.get("max_supply"),
++            "circulating_pct_of_total": supply_pct,
++            "market_cap_usd": mc,
++            "fully_diluted_valuation_usd": fdv,
++            "fdv_to_market_cap_ratio": fdv_ratio,
++            "dilution_signal": dilution_signal,
++        },
++        "returns": {
++            "1h": md.get("price_change_percentage_1h_in_currency", {}).get("usd"),
++            "24h": md.get("price_change_percentage_24h"),
++            "7d": md.get("price_change_percentage_7d_in_currency", {}).get("usd"),
++            "14d": md.get("price_change_percentage_14d_in_currency", {}).get("usd"),
++            "30d": md.get("price_change_percentage_30d_in_currency", {}).get("usd"),
++            "60d": md.get("price_change_percentage_60d_in_currency", {}).get("usd"),
++            "200d": md.get("price_change_percentage_200d_in_currency", {}).get("usd"),
++            "1y": md.get("price_change_percentage_1y_in_currency", {}).get("usd"),
++        },
++        "ath_usd": md.get("ath", {}).get("usd"),
++        "ath_change_pct": md.get("ath_change_percentage", {}).get("usd"),
++        "atl_usd": md.get("atl", {}).get("usd"),
++        "community": {
++            "reddit_subscribers": cd.get("reddit_subscribers"),
++            "reddit_active_48h": cd.get("reddit_accounts_active_48h"),
++            "twitter_followers": cd.get("twitter_followers"),
++            "telegram_users": cd.get("telegram_channel_user_count"),
++        },
++        "developer": {
++            "github_stars": dd.get("stars"),
++            "github_forks": dd.get("forks"),
++            "commits_4_weeks": commits,
++            "pull_requests_merged": dd.get("pull_requests_merged"),
++            "contributors": dd.get("pull_request_contributors"),
++            "dev_signal": dev_signal,
++        },
++        "source": "coingecko",
++    }
++    cache.set(cache_key, result, CACHE_TTL_CRYPTO_DEEP)
++    return result
++
++
++_COINPAPRIKA_BASE = "https://api.coinpaprika.com/v1"
++_STABLE_SYMBOLS = {"USDT", "USDC", "BUSD", "DAI", "USDD", "TUSD", "FRAX"}
++
++
++def _season_signal(ratio: float) -> str:
++    if ratio >= CRYPTO_ALTCOIN_SEASON_THRESHOLD:
++        return "altcoin season — alts outperforming BTC broadly"
++    if ratio <= (1 - CRYPTO_ALTCOIN_SEASON_THRESHOLD):
++        return "BTC season — money concentrating in Bitcoin"
++    return "mixed — no clear rotation"
++
++
++def _build_dominance(btc_dom, eth_dom, stable_dom, altcoin_beats, altcoin_total, btc_30d, source):
++    ratio = altcoin_beats / altcoin_total if altcoin_total > 0 else 0
++    return {
++        "dominance": {
++            "btc_pct": btc_dom,
++            "eth_pct": eth_dom,
++            "stablecoins_pct": stable_dom,
++            "altcoins_other_pct": round(100 - btc_dom - eth_dom - stable_dom, 2),
++        },
++        "signals": {
++            "btc_dominance": "high — flight to BTC quality"
++            if btc_dom > 55
++            else ("normal" if btc_dom > 45 else "low — altcoins in favor"),
++            "stablecoin_dominance": "elevated — capital on sidelines"
++            if stable_dom > 15
++            else ("normal" if stable_dom > 10 else "low — capital deployed"),
++            "altcoin_season": _season_signal(ratio),
++        },
++        "altcoin_season_detail": {
++            "coins_beating_btc_30d": altcoin_beats,
++            "coins_measured": altcoin_total,
++            "ratio": round(ratio, 2),
++            "btc_30d_return_pct": btc_30d,
++        },
++        "source": source,
++    }
++
++
++async def _dominance_from_coinpaprika() -> dict:
++    """Keyless CoinPaprika fallback for dominance when CoinGecko is rate-limited (429).
++
++    CoinPaprika (api.coinpaprika.com, no key) exposes btc dominance + total market
++    cap via /global and per-coin market caps + 30d change via /tickers, which is
++    enough to reconstruct btc/eth/stablecoin dominance and the altcoin-season read.
++    """
++    try:
++        async with httpx.AsyncClient() as client:
++            glob_resp, tick_resp = await asyncio.gather(
++                client.get(f"{_COINPAPRIKA_BASE}/global", timeout=10),
++                client.get(f"{_COINPAPRIKA_BASE}/tickers", params={"limit": 25}, timeout=10),
++            )
++            glob_resp.raise_for_status()
++            tick_resp.raise_for_status()
++            glob = glob_resp.json()
++            tickers = tick_resp.json()
++    except (httpx.HTTPError, ValueError) as e:
++        log.warning("CoinPaprika dominance fallback failed: %s", e)
++        return {"error": "HTTP 429 (CoinGecko) — CoinPaprika fallback also unavailable", "source": "coingecko+coinpaprika"}
++
++    total_mcap = glob.get("market_cap_usd") or 0
++    btc_dom = round(glob.get("bitcoin_dominance_percentage", 0), 2)
++
++    eth_dom = 0.0
++    stable_mcap = 0.0
++    btc_30d = None
++    altcoin_beats = 0
++    altcoin_total = 0
++    if isinstance(tickers, list) and total_mcap > 0:
++        for c in tickers:
++            sym = (c.get("symbol") or "").upper()
++            usd = c.get("quotes", {}).get("USD", {})
++            mcap = usd.get("market_cap") or 0
++            chg = usd.get("percent_change_30d")
++            if sym == "BTC":
++                btc_30d = chg
++            elif sym == "ETH":
++                eth_dom = round(mcap / total_mcap * 100, 2)
++            elif sym in _STABLE_SYMBOLS:
++                stable_mcap += mcap
++            if sym not in _STABLE_SYMBOLS and sym != "BTC" and chg is not None:
++                altcoin_total += 1
++                if btc_30d is not None and chg > btc_30d:
++                    altcoin_beats += 1
++    stable_dom = round(stable_mcap / total_mcap * 100, 2) if total_mcap > 0 else 0.0
++
++    result = _build_dominance(
++        btc_dom, eth_dom, stable_dom, altcoin_beats, altcoin_total, btc_30d,
++        "coinpaprika (fallback — CoinGecko rate-limited)",
++    )
++    cache.set("coingecko_dominance", result, CACHE_TTL_CRYPTO_OVERVIEW)
++    return result
++
++
++async def get_crypto_dominance() -> dict:
++    """BTC/ETH/stablecoin dominance, altcoin season index, and market structure signal."""
++    cache_key = "coingecko_dominance"
++    cached = cache.get(cache_key)
++    if cached:
++        return cached
++
++    async with httpx.AsyncClient() as client:
++        global_data = await _fetch(client, f"{BASE_URL}/global", {})
++
++    if isinstance(global_data, dict) and "_error" in global_data:
++        return await _dominance_from_coinpaprika()
++
++    # Separate call for markets data (rate limiter handles sequencing)
++    async with httpx.AsyncClient() as client:
++        markets_data = await _fetch(
++            client,
++            f"{BASE_URL}/coins/markets",
++            {
++                "vs_currency": "usd",
++                "order": "market_cap_desc",
++                "per_page": 20,
++                "price_change_percentage": "30d",
++                "sparkline": "false",
++            },
++        )
++
++    # If CoinGecko rate-limited the markets leg, take the whole read from CoinPaprika
++    # rather than emitting dominance with a blank altcoin-season signal.
++    if isinstance(markets_data, dict) and "_error" in markets_data:
++        return await _dominance_from_coinpaprika()
++
++    gd = global_data.get("data", {})
++    mc_pct = gd.get("market_cap_percentage", {})
++    btc_dom = round(mc_pct.get("btc", 0), 2)
++    eth_dom = round(mc_pct.get("eth", 0), 2)
++    stable_dom = round(sum(mc_pct.get(s, 0) for s in ("usdt", "usdc", "busd", "dai")), 2)
++
++    stablecoin_symbols = {"USDT", "USDC", "BUSD", "DAI", "USDD", "TUSD", "FRAX"}
++    btc_30d = None
++    altcoin_beats = 0
++    altcoin_total = 0
++
++    if isinstance(markets_data, list):
++        for coin in markets_data:
++            sym = (coin.get("symbol") or "").upper()
++            chg = coin.get("price_change_percentage_30d_in_currency")
++            if sym == "BTC":
++                btc_30d = chg
++            elif sym not in stablecoin_symbols and chg is not None:
++                altcoin_total += 1
++                if btc_30d is not None and chg > btc_30d:
++                    altcoin_beats += 1
++
++    ratio = altcoin_beats / altcoin_total if altcoin_total > 0 else 0
++    if ratio >= CRYPTO_ALTCOIN_SEASON_THRESHOLD:
++        season_signal = "altcoin season — alts outperforming BTC broadly"
++    elif ratio <= (1 - CRYPTO_ALTCOIN_SEASON_THRESHOLD):
++        season_signal = "BTC season — money concentrating in Bitcoin"
++    else:
++        season_signal = "mixed — no clear rotation"
++
++    result = {
++        "dominance": {
++            "btc_pct": btc_dom,
++            "eth_pct": eth_dom,
++            "stablecoins_pct": stable_dom,
++            "altcoins_other_pct": round(100 - btc_dom - eth_dom - stable_dom, 2),
++        },
++        "signals": {
++            "btc_dominance": "high — flight to BTC quality"
++            if btc_dom > 55
++            else ("normal" if btc_dom > 45 else "low — altcoins in favor"),
++            "stablecoin_dominance": "elevated — capital on sidelines"
++            if stable_dom > 15
++            else ("normal" if stable_dom > 10 else "low — capital deployed"),
++            "altcoin_season": season_signal,
++        },
++        "altcoin_season_detail": {
++            "coins_beating_btc_30d": altcoin_beats,
++            "coins_measured": altcoin_total,
++            "ratio": round(ratio, 2),
++            "btc_30d_return_pct": btc_30d,
++        },
++        "source": "coingecko",
++    }
++    cache.set(cache_key, result, CACHE_TTL_CRYPTO_OVERVIEW)
++    return result
++
++
++def _parse_formatted_number(text: str | float | None) -> float | None:
++    """Parse a display-formatted number like '$220,000,000' into a float."""
++    if text is None:
++        return None
++    if isinstance(text, (int, float)):
++        return float(text)
++    cleaned = text.replace("$", "").replace(",", "").strip()
++    try:
++        return float(cleaned)
++    except ValueError:
++        return None
++
++
++async def get_crypto_trending() -> dict:
++    """Top trending cryptocurrencies on CoinGecko in the last 24 hours with live prices."""
++    cache_key = "coingecko_trending"
++    cached = cache.get(cache_key)
++    if cached:
++        return cached
++
++    async with httpx.AsyncClient() as client:
++        trending_data = await _fetch(client, f"{BASE_URL}/search/trending", {})
++
++    if isinstance(trending_data, dict) and "_error" in trending_data:
++        return {"error": trending_data["_error"], "source": "coingecko"}
++
++    coins = trending_data.get("coins", [])
++    coin_ids = [c["item"]["id"] for c in coins if "item" in c]
++
++    prices_data: dict = {}
++    if coin_ids:
++        async with httpx.AsyncClient() as client:
++            markets = await _fetch(
++                client,
++                f"{BASE_URL}/coins/markets",
++                {
++                    "vs_currency": "usd",
++                    "ids": ",".join(coin_ids),
++                    "price_change_percentage": "24h,7d",
++                    "sparkline": "false",
++                },
++            )
++        if isinstance(markets, list):
++            prices_data = {m["id"]: m for m in markets}
++
++    results = []
++    for coin in coins:
++        item = coin.get("item", {})
++        cid = item.get("id", "")
++        p = prices_data.get(cid, {})
++        # The trending payload itself embeds price data — use it whenever the
++        # secondary markets call failed (e.g. 429) instead of blanking fields.
++        embedded = item.get("data") or {}
++        price = p.get("current_price")
++        if price is None:
++            price = embedded.get("price")
++        change_24h = p.get("price_change_percentage_24h")
++        if change_24h is None:
++            change_24h = (embedded.get("price_change_percentage_24h") or {}).get("usd")
++        market_cap = p.get("market_cap")
++        if market_cap is None:
++            market_cap = _parse_formatted_number(embedded.get("market_cap"))
++        results.append(
++            {
++                "name": item.get("name"),
++                "symbol": (item.get("symbol") or "").upper(),
++                "market_cap_rank": item.get("market_cap_rank"),
++                "price_usd": price,
++                "change_24h_pct": change_24h,
++                "change_7d_pct": p.get("price_change_percentage_7d_in_currency"),
++                "market_cap_usd": market_cap,
++            }
++        )
++
++    out = {
++        "trending_coins": results,
++        "note": "Most searched on CoinGecko in last 24h. Trending coins often move 24-48h after appearing here.",
++        "source": "coingecko",
++    }
++    cache.set(cache_key, out, CACHE_TTL_CRYPTO_TRENDING)
++    return out
++
++
++def _parse_coingecko_derivatives(data: list) -> dict[str, dict]:
++    """Reduce CoinGecko's flat ``/derivatives`` ticker list to per-coin funding
++    and open-interest series for the focus symbols."""
++    coin_data: dict[str, dict] = {}
++    for ticker in data:
++        index_id = (ticker.get("index_id") or "").upper()
++        if index_id not in _DERIVATIVES_FOCUS or (ticker.get("contract_type") or "").lower() != "perpetual":
++            continue
++        entry = coin_data.setdefault(index_id, {"funding_rates": [], "open_interests": []})
++        funding = ticker.get("funding_rate")
++        oi = ticker.get("open_interest")
++        if funding is not None:
++            entry["funding_rates"].append(float(funding))
++        if oi is not None:
++            try:
++                entry["open_interests"].append(float(oi))
++            except (TypeError, ValueError):
++                pass
++    return coin_data
++
++
++def _aggregate_derivatives(coin_data: dict[str, dict]) -> dict[str, dict]:
++    """Average funding and total open interest per coin, with a positioning
++    signal. Funding is in percent per 8h (0.01 = 0.01%/8h)."""
++    results = {}
++    for coin, cd in coin_data.items():
++        rates = cd["funding_rates"]
++        ois = cd["open_interests"]
++        avg_funding = round(sum(rates) / len(rates), 6) if rates else None
++        total_oi = round(sum(ois), 0) if ois else None
++        if avg_funding is None:
++            signal = "no data"
++        elif avg_funding > CRYPTO_FUNDING_CROWDED_LONG:
++            signal = f"crowded LONG — longs paying {avg_funding:.4f}%/8h, short squeeze risk"
++        elif avg_funding < CRYPTO_FUNDING_CROWDED_SHORT:
++            signal = f"crowded SHORT — shorts paying {abs(avg_funding):.4f}%/8h, long squeeze risk"
++        elif avg_funding > 0:
++            signal = "mild bullish bias"
++        else:
++            signal = "mild bearish bias"
++        results[coin] = {
++            "avg_funding_rate_8h_pct": avg_funding,
++            "avg_funding_annualized_pct": round(avg_funding * 3 * 365, 2) if avg_funding else None,
++            "total_open_interest_usd": total_oi,
++            "exchanges_tracked": len(rates),
++            "signal": signal,
++        }
++    return results
++
++
++async def get_crypto_derivatives_dashboard() -> dict:
++    """Funding rates and open interest for major crypto perpetual contracts.
++
++    Primary source is CoinGecko's multi-exchange ``/derivatives`` aggregate. When
++    it is unreachable the data is recovered from Hyperliquid — a single keyless
++    venue, so the ``source`` is tagged to make the reduced fidelity explicit.
++    """
++    cache_key = "coingecko_derivatives_dashboard"
++    cached = cache.get(cache_key)
++    if cached:
++        return cached
++
++    async with httpx.AsyncClient() as client:
++        data = await _fetch(client, f"{BASE_URL}/derivatives", {"include_tickers": "unexpired"})
++
++    source = "coingecko"
++    note = (
++        "Funding rates in percent per 8h. >0: longs pay shorts (bullish tilt). "
++        "<0: shorts pay longs. Historical avg ~0.01%/8h (~11%/yr annualized)."
++    )
++
++    if isinstance(data, dict) and "_error" in data:
++        coin_data = await hyperliquid.fetch_derivatives(_DERIVATIVES_FOCUS)
++        if not coin_data:
++            return {"error": data["_error"], "source": "coingecko"}
++        log.info("CoinGecko derivatives failed — served Hyperliquid single-venue fallback")
++        source = "hyperliquid (fallback — CoinGecko unavailable)"
++        note += " NOTE: fallback data is from Hyperliquid only (single venue), not a multi-exchange average."
++    elif not isinstance(data, list):
++        return {"error": "Unexpected response format", "source": "coingecko"}
++    else:
++        coin_data = _parse_coingecko_derivatives(data)
++
++    out = {
++        "derivatives": _aggregate_derivatives(coin_data),
++        "note": note,
++        "source": source,
++    }
++    cache.set(cache_key, out, CACHE_TTL_CRYPTO_DERIVATIVES)
++    return out
++
++
++async def screen_cryptos(
++    category: str = "",
++    min_market_cap_b: float = 0,
++    max_market_cap_b: float = 0,
++    sort_by: str = "market_cap_desc",
++    limit: int = 20,
++) -> dict:
++    """Screen cryptocurrencies by market cap and category.
++
++    Args:
++        category: CoinGecko category slug (e.g. layer-1, decentralized-finance-defi,
++                  artificial-intelligence, gaming, layer-2). Empty = all.
++        min_market_cap_b: Minimum market cap in billions USD (0 = no minimum).
++        max_market_cap_b: Maximum market cap in billions USD (0 = no maximum).
++        sort_by: Sort order — market_cap_desc, volume_desc, price_change_24h_desc,
++                 price_change_24h_asc.
++        limit: Maximum results (default 20, max 50).
++    """
++    cache_key = f"coingecko_screen_{category}_{min_market_cap_b}_{max_market_cap_b}_{sort_by}_{limit}"
++    cached = cache.get(cache_key)
++    if cached:
++        return cached
++
++    params: dict = {
++        "vs_currency": "usd",
++        "order": sort_by,
++        "per_page": min(max(limit, 1), 50),
++        "page": 1,
++        "price_change_percentage": "24h,7d,30d",
++        "sparkline": "false",
++    }
++    if category:
++        params["category"] = category
++
++    async with httpx.AsyncClient() as client:
++        data = await _fetch(client, f"{BASE_URL}/coins/markets", params)
++
++    if isinstance(data, dict) and "_error" in data:
++        return {"error": data["_error"], "source": "coingecko"}
++    if not isinstance(data, list):
++        return {"error": "Unexpected response", "source": "coingecko"}
++
++    min_mc = min_market_cap_b * 1e9 if min_market_cap_b > 0 else 0
++    max_mc = max_market_cap_b * 1e9 if max_market_cap_b > 0 else float("inf")
++
++    results = [
++        {
++            "symbol": (c.get("symbol") or "").upper(),
++            "name": c.get("name"),
++            "rank": c.get("market_cap_rank"),
++            "price_usd": c.get("current_price"),
++            "market_cap_usd": c.get("market_cap"),
++            "volume_24h_usd": c.get("total_volume"),
++            "change_24h_pct": c.get("price_change_percentage_24h"),
++            "change_7d_pct": c.get("price_change_percentage_7d_in_currency"),
++            "change_30d_pct": c.get("price_change_percentage_30d_in_currency"),
++            "ath_change_pct": c.get("ath_change_percentage"),
++        }
++        for c in data
++        if min_mc <= (c.get("market_cap") or 0) <= max_mc
++    ]
++
++    out = {
++        "results": results,
++        "total_matches": len(results),
++        "filters": {
++            "category": category or "all",
++            "min_market_cap_b": min_market_cap_b,
++            "max_market_cap_b": max_market_cap_b,
++            "sort_by": sort_by,
++        },
++        "source": "coingecko",
++    }
++    cache.set(cache_key, out, CACHE_TTL_CRYPTO_TRENDING)
++    return out
+diff --git a/src/terminalq/providers/edgar.py b/src/terminalq/providers/edgar.py
+index 9b6cf4c..68a5ece 100644
+--- a/src/terminalq/providers/edgar.py
++++ b/src/terminalq/providers/edgar.py
+@@ -1,7 +1,9 @@
+ """SEC EDGAR data provider — financial statements and filings."""
+ 
+ import asyncio
++import re
+ import time
++import xml.etree.ElementTree as ET
+ 
+ import httpx
+ 
+@@ -395,3 +397,307 @@ async def get_filings(
+     }
+     cache.set(cache_key, result, CACHE_TTL_FILINGS)
+     return result
++
++
++# ---------------------------------------------------------------------------
++# Insider transactions (Form 4)
++# ---------------------------------------------------------------------------
++
++# Form 4 transactionAcquiredDisposedCode -> direction
++_TXN_CODE_DIRECTION = {"A": "buy", "D": "sell"}
++
++
++def _parse_form4(xml_text: str) -> list[dict]:
++    """Parse non-derivative transactions out of a Form 4 XML document."""
++    root = ET.fromstring(xml_text)
++
++    owner_name = ""
++    owner_title = ""
++    owner_id = root.find("reportingOwner/reportingOwnerId")
++    if owner_id is not None:
++        name_el = owner_id.find("rptOwnerName")
++        if name_el is not None and name_el.text:
++            owner_name = name_el.text
++    relationship = root.find("reportingOwner/reportingOwnerRelationship")
++    if relationship is not None:
++        title_el = relationship.find("officerTitle")
++        if title_el is not None and title_el.text:
++            owner_title = title_el.text
++
++    transactions: list[dict] = []
++    table = root.find("nonDerivativeTable")
++    if table is None:
++        return transactions
++
++    for txn in table.findall("nonDerivativeTransaction"):
++        date_el = txn.find("transactionDate/value")
++        shares_el = txn.find("transactionAmounts/transactionShares/value")
++        if date_el is None or date_el.text is None or shares_el is None or shares_el.text is None:
++            continue
++
++        price_el = txn.find("transactionAmounts/transactionPricePerShare/value")
++        code_el = txn.find("transactionAmounts/transactionAcquiredDisposedCode/value")
++
++        shares = float(shares_el.text)
++        price = float(price_el.text) if price_el is not None and price_el.text else 0.0
++        code = code_el.text if code_el is not None and code_el.text else ""
++
++        transactions.append(
++            {
++                "date": date_el.text,
++                "owner": owner_name,
++                "title": owner_title,
++                "transaction_type": _TXN_CODE_DIRECTION.get(code, code),
++                "shares": shares,
++                "price": price,
++                "value": round(shares * price, 2),
++            }
++        )
++    return transactions
++
++
++async def get_insider_transactions(symbol: str, limit: int = 10) -> dict:
++    """Fetch recent SEC Form 4 insider transactions (buys/sells by executives/directors).
++
++    Parameters
++    ----------
++    symbol:
++        Stock ticker.
++    limit:
++        Max number of Form 4 filings to fetch and parse.
++    """
++    symbol = symbol.upper()
++    cache_key = f"edgar_insider_{symbol}_{limit}"
++    cached = cache.get(cache_key)
++    if cached:
++        log.debug("Cache hit: %s", cache_key)
++        return cached
++
++    try:
++        cik = await _resolve_cik(symbol)
++    except (ValueError, httpx.HTTPError) as exc:
++        return _error(symbol, str(exc))
++
++    url = f"https://data.sec.gov/submissions/CIK{cik}.json"
++    try:
++        async with httpx.AsyncClient() as client:
++            resp = await _rate_limited_get(client, url)
++            resp.raise_for_status()
++            data = resp.json()
++    except httpx.HTTPStatusError as exc:
++        log.warning("EDGAR HTTP %d for %s", exc.response.status_code, url)
++        return _error(symbol, f"HTTP {exc.response.status_code}")
++    except (httpx.TimeoutException, httpx.ConnectError) as exc:
++        log.error("EDGAR connection error: %s", exc)
++        return _error(symbol, "Connection to SEC EDGAR failed")
++
++    company_name = data.get("name", "")
++    recent = data.get("filings", {}).get("recent", {})
++    forms = recent.get("form", [])
++    accession_numbers = recent.get("accessionNumber", [])
++    primary_docs = recent.get("primaryDocument", [])
++
++    form4_docs: list[tuple[str, str]] = []
++    for i, form in enumerate(forms):
++        if form != "4":
++            continue
++        accession = accession_numbers[i] if i < len(accession_numbers) else ""
++        primary_doc = primary_docs[i] if i < len(primary_docs) else ""
++        if accession and primary_doc:
++            form4_docs.append((accession, primary_doc))
++        if len(form4_docs) >= limit:
++            break
++
++    transactions: list[dict] = []
++    async with httpx.AsyncClient() as client:
++        for accession, primary_doc in form4_docs:
++            accession_path = accession.replace("-", "")
++            # primaryDocument often points at the XSLT-rendered HTML view
++            # (e.g. "xslF345X06/form4.xml"); the raw ownership XML lives
++            # under the same filename at the accession root.
++            doc_filename = primary_doc.rsplit("/", 1)[-1]
++            doc_url = f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{accession_path}/{doc_filename}"
++            try:
++                resp = await _rate_limited_get(client, doc_url)
++                resp.raise_for_status()
++                transactions.extend(_parse_form4(resp.text))
++            except (httpx.HTTPError, ET.ParseError) as exc:
++                log.warning("Skipping unparseable Form 4 %s: %s", doc_url, exc)
++                continue
++
++    total_buy_shares = total_sell_shares = 0.0
++    total_buy_value = total_sell_value = 0.0
++    for txn in transactions:
++        if txn["transaction_type"] == "buy":
++            total_buy_shares += txn["shares"]
++            total_buy_value += txn["value"]
++        elif txn["transaction_type"] == "sell":
++            total_sell_shares += txn["shares"]
++            total_sell_value += txn["value"]
++
++    result = {
++        "symbol": symbol,
++        "company_name": company_name,
++        "transactions": transactions,
++        "summary": {
++            "total_buys": total_buy_shares,
++            "total_sells": total_sell_shares,
++            "net_shares": total_buy_shares - total_sell_shares,
++            "net_value": round(total_buy_value - total_sell_value, 2),
++        },
++        "source": "sec_edgar",
++    }
++    cache.set(cache_key, result, CACHE_TTL_FILINGS)
++    return result
++
++
++# ---------------------------------------------------------------------------
++# 13F institutional holdings
++# ---------------------------------------------------------------------------
++
++# Curated CIKs for well-known 13F filers — "who holds ticker X" requires
++# scanning every 13F filer, which isn't feasible via the free API.
++_INSTITUTION_CIKS: dict[str, str] = {
++    "berkshire": "0001067983",
++    "bridgewater": "0001350694",
++    "scion": "0001649339",
++    "ark": "0001697748",
++    "pershing_square": "0001336528",
++}
++
++_THIRTEENF_NS = {"ns": "http://www.sec.gov/edgar/document/thirteenf/informationtable"}
++
++
++def _13f_error(msg: str) -> dict:
++    return {"error": msg, "source": "sec_edgar"}
++
++
++async def get_13f_holdings(institution: str, limit: int = 20) -> dict:
++    """Fetch the latest 13F top holdings for a tracked institution.
++
++    Parameters
++    ----------
++    institution:
++        One of: berkshire, bridgewater, scion, ark, pershing_square.
++    limit:
++        Max number of holdings to return, sorted by value descending.
++    """
++    institution_key = institution.lower()
++    cik = _INSTITUTION_CIKS.get(institution_key)
++    if cik is None:
++        return _13f_error(f"Unknown institution '{institution}'. Valid options: {', '.join(sorted(_INSTITUTION_CIKS))}")
++
++    cache_key = f"edgar_13f_{institution_key}_{limit}"
++    cached = cache.get(cache_key)
++    if cached:
++        log.debug("Cache hit: %s", cache_key)
++        return cached
++
++    submissions_url = f"https://data.sec.gov/submissions/CIK{cik}.json"
++    try:
++        async with httpx.AsyncClient() as client:
++            resp = await _rate_limited_get(client, submissions_url)
++            resp.raise_for_status()
++            data = resp.json()
++    except httpx.HTTPStatusError as exc:
++        log.warning("EDGAR HTTP %d for %s", exc.response.status_code, submissions_url)
++        return _13f_error(f"HTTP {exc.response.status_code}")
++    except (httpx.TimeoutException, httpx.ConnectError) as exc:
++        log.error("EDGAR connection error: %s", exc)
++        return _13f_error("Connection to SEC EDGAR failed")
++
++    institution_name = data.get("name", "")
++    recent = data.get("filings", {}).get("recent", {})
++    forms = recent.get("form", [])
++    accession_numbers = recent.get("accessionNumber", [])
++    filing_dates = recent.get("filingDate", [])
++
++    accession = None
++    report_date = None
++    for i, form in enumerate(forms):
++        if form == "13F-HR":
++            accession = accession_numbers[i] if i < len(accession_numbers) else None
++            report_date = filing_dates[i] if i < len(filing_dates) else None
++            break
++
++    if accession is None:
++        return _13f_error(f"No 13F-HR filing found for {institution_key}")
++
++    accession_path = accession.replace("-", "")
++    index_url = f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{accession_path}/index.json"
++    try:
++        async with httpx.AsyncClient() as client:
++            resp = await _rate_limited_get(client, index_url)
++            resp.raise_for_status()
++            index_data = resp.json()
++    except httpx.HTTPStatusError as exc:
++        log.warning("EDGAR HTTP %d for %s", exc.response.status_code, index_url)
++        return _13f_error(f"HTTP {exc.response.status_code}")
++    except (httpx.TimeoutException, httpx.ConnectError) as exc:
++        log.error("EDGAR connection error: %s", exc)
++        return _13f_error("Connection to SEC EDGAR failed")
++
++    info_table_name = None
++    for item in index_data.get("directory", {}).get("item", []):
++        name = item.get("name", "")
++        if re.fullmatch(r"\d+\.xml", name):
++            info_table_name = name
++            break
++
++    if info_table_name is None:
++        return _13f_error(f"Could not locate 13F information table for {institution_key}")
++
++    table_url = f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{accession_path}/{info_table_name}"
++    try:
++        async with httpx.AsyncClient() as client:
++            resp = await _rate_limited_get(client, table_url)
++            resp.raise_for_status()
++            xml_text = resp.text
++    except httpx.HTTPStatusError as exc:
++        log.warning("EDGAR HTTP %d for %s", exc.response.status_code, table_url)
++        return _13f_error(f"HTTP {exc.response.status_code}")
++    except (httpx.TimeoutException, httpx.ConnectError) as exc:
++        log.error("EDGAR connection error: %s", exc)
++        return _13f_error("Connection to SEC EDGAR failed")
++
++    try:
++        root = ET.fromstring(xml_text)
++    except ET.ParseError as exc:
++        log.error("Failed to parse 13F information table: %s", exc)
++        return _13f_error("Failed to parse 13F information table")
++
++    holdings: list[dict] = []
++    for entry in root.findall("ns:infoTable", _THIRTEENF_NS):
++        issuer_el = entry.find("ns:nameOfIssuer", _THIRTEENF_NS)
++        cusip_el = entry.find("ns:cusip", _THIRTEENF_NS)
++        value_el = entry.find("ns:value", _THIRTEENF_NS)
++        shares_el = entry.find("ns:shrsOrPrnAmt/ns:sshPrnamt", _THIRTEENF_NS)
++        if issuer_el is None or issuer_el.text is None or value_el is None or value_el.text is None:
++            continue
++        holdings.append(
++            {
++                "issuer": issuer_el.text,
++                "cusip": cusip_el.text if cusip_el is not None else "",
++                "value_thousands_usd": int(value_el.text),
++                "shares": int(shares_el.text) if shares_el is not None and shares_el.text else 0,
++            }
++        )
++
++    holdings.sort(key=lambda h: h["value_thousands_usd"], reverse=True)
++    total_value = sum(h["value_thousands_usd"] for h in holdings)
++    top_holdings = holdings[:limit]
++    for h in top_holdings:
++        h["pct_of_portfolio"] = round(h["value_thousands_usd"] / total_value * 100, 2) if total_value else 0.0
++
++    result = {
++        "institution": institution_key,
++        "institution_name": institution_name,
++        "cik": cik,
++        "report_date": report_date,
++        "holdings": top_holdings,
++        "total_value_thousands_usd": total_value,
++        "total_positions": len(holdings),
++        "source": "sec_edgar",
++    }
++    cache.set(cache_key, result, CACHE_TTL_FILINGS)
++    return result
+diff --git a/src/terminalq/providers/finnhub.py b/src/terminalq/providers/finnhub.py
+index c26120e..b76b3ae 100644
+--- a/src/terminalq/providers/finnhub.py
++++ b/src/terminalq/providers/finnhub.py
+@@ -16,6 +16,7 @@ from terminalq.config import (
+     FINNHUB_RATE_LIMIT,
+ )
+ from terminalq.logging_config import log
++from terminalq.providers import fed_calendar, fred, fred_ext
+ from terminalq.rate_limiter import RateLimiter
+ 
+ BASE_URL = "https://finnhub.io/api/v1"
+@@ -344,6 +345,36 @@ async def get_economic_calendar(days: int = 7) -> dict:
+         )
+ 
+     if isinstance(data, dict) and "_error" in data:
++        # Finnhub's economic calendar became a premium-only endpoint — build a
++        # free calendar from FRED's official release schedule (CPI/NFP/PCE/GDP/
++        # PPI/retail/JOLTS) merged with the Fed's published FOMC dates.
++        log.warning("Finnhub calendar unavailable (%s) — building free calendar (FRED + FOMC)", data["_error"])
++        releases, fomc = await asyncio.gather(
++            fred_ext.get_release_calendar(days),
++            fed_calendar.get_fomc_meetings(days),
++        )
++        events: list[dict] = []
++        sources: list[str] = []
++        if "error" not in releases:
++            events.extend(releases.get("events", []))
++            sources.append("fred")
++        if "error" not in fomc:
++            events.extend(fomc.get("events", []))
++            sources.append("federalreserve.gov")
++        if events:
++            events.sort(key=lambda e: e.get("date", ""))
++            return {
++                "period": f"{start} to {end}",
++                "total_events": len(events),
++                "high_impact_count": len(events),
++                "events": events,
++                "next_fomc": fomc.get("next_fomc") if "error" not in fomc else None,
++                "note": (
++                    "Finnhub economic calendar requires a premium plan — showing free "
++                    "high-impact US releases (FRED) plus FOMC decision dates."
++                ),
++                "source": " + ".join(sources) + " (fallback)",
++            }
+         return {"error": data["_error"], "source": "finnhub"}
+ 
+     # Parse events from the response
+diff --git a/src/terminalq/providers/historical.py b/src/terminalq/providers/historical.py
+index 993b615..fbbea29 100644
+--- a/src/terminalq/providers/historical.py
++++ b/src/terminalq/providers/historical.py
+@@ -7,9 +7,8 @@ yfinance fails or returns empty data.
+ import asyncio
+ from datetime import datetime, timedelta
+ 
+-import yfinance
+-
+ from terminalq import cache
++from terminalq._lazy_yfinance import yfinance
+ from terminalq.config import CACHE_TTL_DIVIDENDS, CACHE_TTL_HISTORY, POLYGON_API_KEY
+ from terminalq.logging_config import log
+ 
+diff --git a/src/terminalq/providers/search.py b/src/terminalq/providers/search.py
+index 286413c..08bb518 100644
+--- a/src/terminalq/providers/search.py
++++ b/src/terminalq/providers/search.py
+@@ -1,6 +1,15 @@
+-"""Brave Search provider — web search for market news and research."""
++"""Web search — DuckDuckGo by default (keyless), Brave Search when a key is set.
++
++Brave gives richer results (separate news section) but its free tier requires
++signup; DuckDuckGo needs nothing. Brave is used when BRAVE_API_KEY is
++configured and within budget, and any Brave failure — outage, rate limit, or
++exhausted monthly quota — degrades to DuckDuckGo instead of erroring.
++"""
++
++import asyncio
+ 
+ import httpx
++from ddgs import DDGS
+ 
+ from terminalq import cache, usage_tracker
+ from terminalq.config import BRAVE_API_KEY, BRAVE_MONTHLY_LIMIT, CACHE_TTL_SEARCH
+@@ -8,30 +17,48 @@ from terminalq.logging_config import log
+ 
+ BASE_URL = "https://api.search.brave.com/res/v1/web/search"
+ 
++_MAX_RESULTS = 20
+ 
+-async def web_search(query: str, count: int = 5) -> dict:
+-    """Search the web using Brave Search API.
+-
+-    Args:
+-        query: Search query string.
+-        count: Number of results to return (default 5, max 20).
+ 
+-    Returns:
+-        Dict with search results including title, url, and description.
+-    """
+-    if not BRAVE_API_KEY:
+-        return {
+-            "error": "BRAVE_API_KEY not configured. Get a free key at https://brave.com/search/api/",
+-            "source": "brave_search",
++def _map_ddg_rows(rows: list[dict]) -> list[dict]:
++    """Normalize DuckDuckGo rows to the shared result shape."""
++    return [
++        {
++            "title": row.get("title", ""),
++            "url": row.get("href", ""),
++            "description": row.get("body", ""),
++            "age": "",
+         }
++        for row in rows
++    ]
++
++
++async def _ddg_search(query: str, count: int) -> dict:
++    """Search DuckDuckGo (keyless). Returns the shared result shape or an error dict."""
++
++    def _rows() -> list[dict]:
++        with DDGS() as ddgs:
++            return list(ddgs.text(query, max_results=count))
++
++    try:
++        rows = await asyncio.to_thread(_rows)
++    except Exception as e:  # ddgs raises a grab-bag of exception types
++        log.warning("DuckDuckGo search failed for query '%s': %s", query, e)
++        return {"error": f"DuckDuckGo search failed: {e}", "source": "duckduckgo"}
++
++    results = _map_ddg_rows(rows)
++    return {
++        "query": query,
++        "total_results": len(results),
++        "results": results,
++        "news": [],
++        "source": "duckduckgo",
++        "note": "DuckDuckGo (keyless default). Set BRAVE_API_KEY for Brave Search with a news section.",
++    }
+ 
+-    cache_key = f"brave_search_{query}_{count}"
+-    cached = cache.get(cache_key)
+-    if cached:
+-        log.debug("Cache hit: %s", cache_key)
+-        return cached
+ 
+-    # Atomically increment and check Brave Search budget
++async def _brave_search(query: str, count: int) -> dict:
++    """Search via the Brave API (key + monthly budget). Error dict on any failure."""
+     within_budget, usage = await usage_tracker.increment_and_check("brave_search", BRAVE_MONTHLY_LIMIT)
+     if not within_budget:
+         return {
+@@ -40,8 +67,6 @@ async def web_search(query: str, count: int = 5) -> dict:
+             "source": "brave_search",
+         }
+ 
+-    count = min(count, 20)
+-
+     try:
+         async with httpx.AsyncClient() as client:
+             resp = await client.get(
+@@ -66,34 +91,27 @@ async def web_search(query: str, count: int = 5) -> dict:
+         log.error("Brave Search connection failed")
+         return {"error": "Connection failed", "source": "brave_search"}
+ 
+-    # Parse web results
+-    web_results = data.get("web", {}).get("results", [])
+-    results = []
+-    for item in web_results[:count]:
+-        results.append(
+-            {
+-                "title": item.get("title", ""),
+-                "url": item.get("url", ""),
+-                "description": item.get("description", ""),
+-                "age": item.get("age", ""),
+-            }
+-        )
+-
+-    # Parse news results if available
+-    news_results = data.get("news", {}).get("results", [])
+-    news = []
+-    for item in news_results[:5]:
+-        news.append(
+-            {
+-                "title": item.get("title", ""),
+-                "url": item.get("url", ""),
+-                "description": item.get("description", ""),
+-                "age": item.get("age", ""),
+-                "source": item.get("meta_url", {}).get("hostname", ""),
+-            }
+-        )
+-
+-    result = {
++    results = [
++        {
++            "title": item.get("title", ""),
++            "url": item.get("url", ""),
++            "description": item.get("description", ""),
++            "age": item.get("age", ""),
++        }
++        for item in data.get("web", {}).get("results", [])[:count]
++    ]
++    news = [
++        {
++            "title": item.get("title", ""),
++            "url": item.get("url", ""),
++            "description": item.get("description", ""),
++            "age": item.get("age", ""),
++            "source": item.get("meta_url", {}).get("hostname", ""),
++        }
++        for item in data.get("news", {}).get("results", [])[:5]
++    ]
++
++    return {
+         "query": query,
+         "total_results": len(results),
+         "results": results,
+@@ -101,5 +119,37 @@ async def web_search(query: str, count: int = 5) -> dict:
+         "source": "brave_search",
+         "usage": usage_tracker.get_monthly_usage("brave_search", BRAVE_MONTHLY_LIMIT),
+     }
++
++
++async def web_search(query: str, count: int = 5) -> dict:
++    """Search the web: Brave when configured, DuckDuckGo otherwise or on failure.
++
++    Args:
++        query: Search query string.
++        count: Number of results to return (default 5, max 20).
++
++    Returns:
++        Dict with search results (title, url, description) — or an error dict
++        if every provider failed.
++    """
++    count = min(count, _MAX_RESULTS)
++    cache_key = f"web_search_{query}_{count}"
++    cached = cache.get(cache_key)
++    if cached:
++        log.debug("Cache hit: %s", cache_key)
++        return cached
++
++    result: dict | None = None
++    if BRAVE_API_KEY:
++        result = await _brave_search(query, count)
++        if "error" in result:
++            log.warning("Brave Search unavailable (%s) — falling back to DuckDuckGo", result["error"])
++            result = None
++
++    if result is None:
++        result = await _ddg_search(query, count)
++        if "error" in result:
++            return result
++
+     cache.set(cache_key, result, CACHE_TTL_SEARCH)
+     return result
+diff --git a/src/terminalq/server.py b/src/terminalq/server.py
+index a0c4b62..4631b84 100644
+--- a/src/terminalq/server.py
++++ b/src/terminalq/server.py
+@@ -7,11 +7,45 @@ import time
+ 
+ from mcp.server.fastmcp import FastMCP
+ 
+-from terminalq import audit, charts, usage_tracker
++from terminalq import audit, charts, history, usage_tracker, voice
++from terminalq.analytics import (
++    allocation,
++    correlation,
++    correlation_regime,
++    prediction_grader,
++    regime_history,
++    risk,
++)
+ from terminalq.config import BRAVE_MONTHLY_LIMIT
+-from terminalq.analytics import allocation, risk
+ from terminalq.logging_config import log
+-from terminalq.providers import coingecko, edgar, finnhub, fred, historical, portfolio, screener, search, technical
++from terminalq.providers import (
++    cftc,
++    climate,
++    coingecko,
++    crypto_analytics,
++    cycle,
++    defillama,
++    edgar,
++    etf_flows,
++    event_scenarios,
++    finnhub,
++    fred,
++    historical,
++    market_data,
++    mempool,
++    options_flow,
++    portfolio,
++    prediction_markets,
++    reports,
++    retail_sentiment,
++    rsu_tax,
++    screener,
++    search,
++    sectors,
++    stress_backtest,
++    technical,
++    valuation,
++)
+ 
+ mcp = FastMCP("TerminalQ")
+ 
+@@ -288,6 +322,36 @@ async def terminalq_get_filings(symbol: str, filing_type: str = "", limit: int =
+     return json.dumps(result, indent=2)
+ 
+ 
++@mcp.tool()
++@audited
++async def terminalq_get_insider_transactions(symbol: str, limit: int = 10) -> str:
++    """Get recent SEC Form 4 insider transactions (buys/sells by executives and directors).
++
++    Returns each transaction (date, owner, title, buy/sell, shares, price,
++    value) plus a summary of total buy/sell shares and net value —
++    useful for gauging insider sentiment.
++
++    Args:
++        symbol: Ticker symbol (e.g., AAPL, PINS)
++        limit: Maximum number of Form 4 filings to fetch and parse (default 10)
++    """
++    result = await edgar.get_insider_transactions(symbol.upper(), limit)
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_13f_holdings(institution: str, limit: int = 20) -> str:
++    """Get the latest 13F top holdings for a tracked institution.
++
++    Args:
++        institution: One of berkshire, bridgewater, scion, ark, pershing_square
++        limit: Maximum number of holdings to return, sorted by value (default 20)
++    """
++    result = await edgar.get_13f_holdings(institution.lower(), limit)
++    return json.dumps(result, indent=2)
++
++
+ @mcp.tool()
+ @audited
+ async def terminalq_get_economic_indicator(indicator: str, limit: int = 12) -> str:
+@@ -639,6 +703,10 @@ async def terminalq_get_economic_calendar(days: int = 7) -> str:
+ async def terminalq_web_search(query: str, count: int = 5) -> str:
+     """Search the web for financial news, company info, or market analysis.
+ 
++    Uses DuckDuckGo by default (free, no key). If BRAVE_API_KEY is configured,
++    Brave Search is used instead (adds a news section), automatically falling
++    back to DuckDuckGo on any Brave failure or quota exhaustion.
++
+     Args:
+         query: Search query (e.g., "AAPL Q4 earnings", "Fed rate decision March 2026")
+         count: Number of results to return (default 5, max 20)
+@@ -718,6 +786,791 @@ async def terminalq_get_usage_stats() -> str:
+     return json.dumps(result, indent=2, default=str)
+ 
+ 
++# ---------------------------------------------------------------------------
++# Phase 4: JPMorgan-grade macro, credit, and market intelligence tools
++# ---------------------------------------------------------------------------
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_jolts() -> str:
++    """Get JOLTS labor market dashboard: job openings, hires, layoffs, quits, and wage growth.
++
++    Provides a more complete picture of labor market health than unemployment alone.
++    JOLTS data leads the headline unemployment rate by several weeks.
++    """
++    result = await fred.get_jolts_dashboard()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_credit_spreads() -> str:
++    """Get ICE BofA credit spreads: Investment Grade, High Yield, BB, B, and CCC option-adjusted spreads.
++
++    Credit spreads are the market's real-time fear gauge. Tight spreads = complacency.
++    Wide spreads = stress. Historical averages: IG ~145bps, HY ~500bps.
++    Data sourced from FRED (free — no extra API key required).
++    """
++    result = await fred.get_credit_spreads_dashboard()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_consumer_health() -> str:
++    """Get consumer financial health indicators: household debt service ratio and loan delinquency rates.
++
++    Covers credit card, mortgage, and auto loan delinquency rates alongside
++    total debt payments as a share of disposable income.
++    """
++    result = await fred.get_consumer_health_dashboard()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_fiscal_health() -> str:
++    """Get US fiscal health indicators: federal debt as % of GDP and monthly deficit/surplus.
++
++    High debt levels constrain the government's ability to use fiscal stimulus
++    in a recession. Currently tracking toward 120% debt/GDP by 2036 (CBO baseline).
++    """
++    result = await fred.get_fiscal_dashboard()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_commodities() -> str:
++    """Get key commodity prices: WTI crude oil, gold, retail gasoline, and the US dollar index.
++
++    All sourced from FRED — no extra API key required.
++    WTI in $/barrel, gold in $/troy oz, gasoline in $/gallon (weekly), dollar index Jan 2006=100.
++    """
++    result = await fred.get_commodities_dashboard()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_cpi_components() -> str:
++    """Get CPI breakdown by component: shelter, energy, food, core goods, and services inflation.
++
++    Decomposing CPI is essential for Fed-watching — shelter and services are
++    'sticky' (slow to fall), while goods and energy can move quickly.
++    """
++    result = await fred.get_cpi_components_dashboard()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_liquidity() -> str:
++    """Get Fed balance sheet, reverse repo (RRP), and Treasury General Account (TGA) — net liquidity proxy.
++
++    Net liquidity = Fed balance sheet - RRP - TGA. Rising net liquidity has
++    historically been a tailwind for risk assets (equities, crypto); falling
++    net liquidity is a headwind. Sourced from FRED — no extra API key required.
++    """
++    result = await fred.get_liquidity_dashboard()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_rates_dashboard() -> str:
++    """Get Treasury yields, real yields (TIPS), and breakeven inflation expectations.
++
++    Real yields (TIPS) are a key driver for gold and crypto valuations.
++    Breakeven inflation is the market's implied CPI forecast.
++    Sourced from FRED — no extra API key required.
++    """
++    result = await fred.get_rates_dashboard()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_market_overview() -> str:
++    """Get a broad market overview: S&P 500, Dow, Nasdaq, Russell 2000, VIX, dollar, gold, and oil.
++
++    Includes YTD return, 1-year return, and 52-week high/low for each.
++    VIX includes a fear signal interpretation.
++    """
++    result = await market_data.get_market_overview()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_international_markets() -> str:
++    """Get international equity market performance: EAFE, EM, Europe, Japan, China, UK, Brazil, Korea, India.
++
++    ETF-based proxies (iShares, Vanguard). All returns in USD — currency impact included.
++    Useful for assessing global diversification and rotation opportunities.
++    """
++    result = await market_data.get_international_markets()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_style_box() -> str:
++    """Get US equity style box performance: Large/Mid/Small Cap × Growth/Value/Blend.
++
++    iShares ETF proxies for all 9 style boxes. Shows which size and style factor
++    is leading or lagging — a standard JPMorgan/institutional portfolio lens.
++    """
++    result = await market_data.get_style_box()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_asset_class_returns() -> str:
++    """Get multi-period returns across all major asset classes.
++
++    Covers: US/Intl equities, IG/HY/long-duration bonds, TIPS, REITs, gold, commodities.
++    Returns shown for 1mo, 3mo, 6mo, YTD, 1yr, 3yr, and 5yr periods.
++    The institutional equivalent of JPMorgan's annual asset class 'return quilt'.
++    """
++    result = await market_data.get_asset_class_returns()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_stock_fundamentals(symbol: str) -> str:
++    """Get deep fundamental metrics for a stock: valuation multiples, margins, growth rates, leverage, and market sentiment.
++
++    Covers forward P/E, PEG, P/B, EV/EBITDA, profit/operating/gross margins,
++    revenue and earnings growth, debt/equity, short interest, and institutional ownership.
++
++    Args:
++        symbol: Ticker symbol (e.g., AAPL, NVDA, TSLA)
++    """
++    result = await market_data.get_stock_fundamentals(symbol.upper())
++    return json.dumps(result, indent=2)
++
++
++# ---------------------------------------------------------------------------
++# Phase 5: Complete crypto intelligence suite
++# ---------------------------------------------------------------------------
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_crypto_market_overview() -> str:
++    """Get global crypto market: total market cap, BTC/ETH/stablecoin dominance, 24h change, and Fear & Greed index.
++
++    The macro dashboard equivalent for crypto — answers whether the overall market
++    is risk-on or risk-off before looking at individual coins.
++    """
++    result = await coingecko.get_crypto_market_overview()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_fear_greed(limit: int = 30) -> str:
++    """Get the Crypto Fear & Greed Index with up to 30 days of history.
++
++    Scale: 0 = Extreme Fear (historic buy zone), 100 = Extreme Greed (historic sell zone).
++    Below 20 has historically been the best long-term entry point for crypto.
++
++    Args:
++        limit: Number of days of history to return (default 30)
++    """
++    result = await crypto_analytics.get_fear_greed(limit)
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_crypto_deep(symbol: str) -> str:
++    """Get a complete coin profile: supply, FDV dilution risk, all-timeframe returns, community, and developer activity.
++
++    Covers: circulating vs total supply, fully diluted valuation (FDV) vs market cap,
++    1h/24h/7d/14d/30d/60d/200d/1yr returns, Reddit/Twitter/Telegram community size,
++    and GitHub commits, stars, forks, and pull request activity.
++
++    Args:
++        symbol: Crypto ticker (e.g., BTC, ETH, SOL, ARB)
++    """
++    result = await coingecko.get_crypto_deep(symbol.upper())
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_crypto_technicals(symbol: str) -> str:
++    """Get technical indicators for a crypto asset computed from 200 days of price history.
++
++    Covers: RSI (14), SMA 20/50/200, EMA 12/26, MACD, distance from 200-day MA,
++    golden/death cross signal, 30-day realized volatility, and NVT proxy (P/E equivalent).
++
++    Args:
++        symbol: Crypto ticker (e.g., BTC, ETH, SOL)
++    """
++    result = await crypto_analytics.get_crypto_technicals(symbol.upper())
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_btc_onchain() -> str:
++    """Get Bitcoin on-chain health metrics from Blockchain.com.
++
++    Covers: hash rate (network security), mining difficulty, 24h transaction count and volume,
++    average transaction fees, and next halving countdown (blocks remaining + estimated days).
++    """
++    result = await crypto_analytics.get_btc_onchain()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_crypto_derivatives() -> str:
++    """Get funding rates and open interest for major crypto perpetual contracts (BTC, ETH, SOL, XRP, BNB).
++
++    Positive funding = longs paying shorts (bullish tilt, squeeze risk if sentiment shifts).
++    Negative funding = shorts paying longs (bearish tilt, short squeeze risk).
++    Historical average funding rate is ~0.01% per 8 hours.
++    """
++    result = await coingecko.get_crypto_derivatives_dashboard()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_crypto_correlations(symbol: str = "BTC") -> str:
++    """Get 90-day rolling correlation of a crypto asset vs S&P 500, Gold, US Dollar (DXY), and Treasuries.
++
++    Shows whether crypto is trading as a risk asset (correlated with stocks),
++    a safe haven (correlated with gold), or independently. Critical for understanding
++    how macro forces are driving crypto prices.
++
++    Args:
++        symbol: Crypto ticker (default BTC, also works for ETH, SOL, etc.)
++    """
++    result = await crypto_analytics.get_crypto_correlations(symbol.upper())
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_crypto_dominance() -> str:
++    """Get BTC, ETH, and stablecoin dominance with altcoin season index.
++
++    Rising BTC dominance = money concentrating in Bitcoin (defensive).
++    Falling BTC dominance = alt season (risk appetite high).
++    Rising stablecoin dominance = capital rotating to cash (bearish for prices).
++    """
++    result = await coingecko.get_crypto_dominance()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_crypto_trending() -> str:
++    """Get the top trending cryptocurrencies on CoinGecko in the last 24 hours.
++
++    Trending coins often see price moves 24-48 hours after appearing here.
++    Useful for identifying emerging narratives and momentum before it shows in price.
++    """
++    result = await coingecko.get_crypto_trending()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_screen_cryptos(
++    category: str = "",
++    min_market_cap_b: float = 0,
++    max_market_cap_b: float = 0,
++    sort_by: str = "market_cap_desc",
++    limit: int = 20,
++) -> str:
++    """Screen cryptocurrencies by category and market cap with flexible sorting.
++
++    Args:
++        category: CoinGecko category slug. Examples: layer-1, decentralized-finance-defi,
++                  artificial-intelligence, gaming, layer-2, real-world-assets. Empty = all.
++        min_market_cap_b: Minimum market cap in billions (0 = no minimum).
++        max_market_cap_b: Maximum market cap in billions (0 = no maximum).
++        sort_by: Sort order — market_cap_desc, volume_desc, price_change_24h_desc (momentum),
++                 price_change_24h_asc (oversold).
++        limit: Maximum results (default 20, max 50).
++    """
++    result = await coingecko.screen_cryptos(category, min_market_cap_b, max_market_cap_b, sort_by, limit)
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_defi_overview() -> str:
++    """Get total DeFi TVL, top chains by TVL share, and TVL trend (capital flow signal).
++
++    Rising DeFi TVL often coincides with alt season / risk-on conditions;
++    falling TVL often coincides with risk-off conditions.
++    Sourced from DefiLlama — free, no API key required.
++    """
++    result = await defillama.get_defi_overview()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_cot_report(market: str) -> str:
++    """Get CFTC Commitment of Traders positioning: commercial, large speculator, and small speculator net positions.
++
++    Shows week-over-week change and flags when large speculators (funds/CTAs)
++    are crowded long or short relative to open interest — useful for
++    contrarian positioning and confirming dealer/gamma narratives.
++    Sourced from CFTC — free, no API key required.
++
++    Args:
++        market: One of btc, sp500, nasdaq, 10y_note, eurusd, gold, wti.
++    """
++    result = await cftc.get_cot_report(market)
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_correlation_matrix(symbols: str = "") -> str:
++    """Get a cross-asset correlation matrix of daily returns (90-day window).
++
++    Default universe spans equities (SPY, QQQ, IWM), bonds (TLT, HYG),
++    commodities (GLD, USO), the dollar (DX-Y.NYB), and crypto (BTC-USD,
++    ETH-USD) — useful for spotting regime shifts, decoupling, and
++    diversification opportunities.
++
++    Args:
++        symbols: Optional comma-separated yfinance tickers to override the default universe.
++    """
++    result = await correlation.get_cross_asset_correlation_matrix(symbols)
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_stablecoins() -> str:
++    """Get total stablecoin supply, top stablecoins by share, and supply growth trend.
++
++    Stablecoin supply is crypto's 'dry powder' — rising supply means new money
++    is entering the ecosystem's waiting room (bullish ammunition); contracting
++    supply means capital is leaving crypto entirely (bearish).
++    Sourced from DefiLlama — free, no API key required.
++    """
++    result = await defillama.get_stablecoins_overview()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_fed_path() -> str:
++    """Get the market-implied Fed policy path from 30-day fed funds futures (ZQ).
++
++    Shows the implied fed funds rate for each of the next several months and
++    how many basis points of cuts or hikes are priced in — the same data
++    behind CME FedWatch. Implied rate = 100 − futures price.
++    Sourced from Yahoo Finance — free, no API key required.
++    """
++    result = await market_data.get_fed_path()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_equity_sentiment() -> str:
++    """Get equity sentiment gauges: VIX term structure, CBOE SKEW, and RSP/SPY breadth.
++
++    VIX above VIX3M (backwardation) = acute fear, historically near capitulation
++    lows. SKEW above ~145 = heavy tail-risk hedging. Equal-weight S&P (RSP)
++    beating cap-weight (SPY) = broad, healthy participation; lagging = narrow
++    mega-cap leadership. The equity-market counterpart to crypto's Fear & Greed.
++    Sourced from Yahoo Finance — free, no API key required.
++    """
++    result = await market_data.get_equity_sentiment()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_btc_etf_flows(days: int = 10) -> str:
++    """Get recent daily spot Bitcoin ETF flows (IBIT, FBTC, GBTC, ...) in US$ millions.
++
++    Daily creations/redemptions across the US spot Bitcoin ETFs are the most
++    direct gauge of institutional BTC demand: sustained inflows = institutions
++    accumulating; sustained outflows = institutions distributing.
++    Scraped from Farside Investors — free, no API key required.
++
++    Args:
++        days: Number of most recent daily rows to return (default 10).
++    """
++    result = await etf_flows.get_btc_etf_flows(days)
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_cycle_position() -> str:
++    """Get the business-cycle & recession dashboard: six signals, one verdict.
++
++    Combines the Sahm rule (unemployment-rise recession trigger), both
++    yield-curve spreads (10y-2y, 10y-3m), the jobless-claims trend, Chicago
++    Fed financial conditions (NFCI), and the Atlanta Fed GDPNow nowcast into
++    a rules-based verdict on where the US economy sits in the cycle.
++    Sourced from FRED — free.
++    """
++    result = await cycle.get_cycle_position()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_sector_rotation() -> str:
++    """Get sector rotation: the 11 SPDR sector ETFs vs SPY over 1/3/6 months.
++
++    Sector leadership confirms or contradicts the macro regime: defensives
++    (staples/utilities/health care) leading = risk-off under the surface even
++    when the index looks calm; cyclicals leading = risk-on confirmed. Includes
++    leaders/laggards and a cyclical-vs-defensive spread signal.
++    Sourced from Yahoo Finance — free, no API key required.
++    """
++    result = await sectors.get_sector_rotation()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_market_valuation() -> str:
++    """Get market valuation: Shiller CAPE, S&P 500 earnings yield, and equity risk premium.
++
++    CAPE is ranked against ~150 years of monthly history (percentile context).
++    Equity risk premium = earnings yield minus 10y Treasury yield — how much
++    you are paid to own stocks instead of risk-free bonds at today's prices.
++    Sourced from multpl.com (Shiller data) and FRED — free.
++    """
++    result = await valuation.get_market_valuation()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_metric_context(indicator: str) -> str:
++    """Rank any FRED metric's latest value against its entire history.
++
++    Turns a raw number into positional context: "HY spread 2.8% = 24th
++    percentile since 1996 — credit unusually calm". Works with any FRED
++    series ID or TerminalQ alias (hy_spread, ig_spread, unemployment,
++    initial_claims, nfci, sahm_rule, gdpnow, dollar_index, wti_oil, ...).
++
++    Args:
++        indicator: FRED series ID or alias (e.g. "hy_spread").
++    """
++    result = await fred.get_metric_context(indicator)
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_btc_mempool() -> str:
++    """Get Bitcoin mempool microstructure: recommended fees and congestion backlog.
++
++    Fee levels are a direct read on on-chain demand: near-empty mempool with
++    1-5 sat/vB fees = little real usage pressure; sustained 50+ sat/vB =
++    demand spike (bull-market congestion). Includes next-block/30min/1hr fee
++    tiers, unconfirmed transaction count, and estimated backlog clear time.
++    Sourced from mempool.space — free, no API key required.
++    """
++    result = await mempool.get_btc_mempool()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_climate_risk_watch() -> str:
++    """Get weather/climate production-risk readings for key commodity regions.
++
++    Compares the trailing 30 days of observed temperature and precipitation
++    (NASA POWER, MERRA-2 reanalysis satellite data) against each region's
++    2001-2020 climatological normal, across grains/oilseeds (US Corn Belt,
++    Mato Grosso/Brazil, Pampas/Argentina, Western Australia wheat), softs
++    (Indonesia palm oil, Ivory Coast cocoa, Vietnam coffee, Brazil sugar),
++    metals/battery materials (Chile copper + lithium, Australia iron ore),
++    and energy (US Permian Basin, US Gulf Coast). Flags any region running
++    hot/cold or wet/dry beyond threshold, with the full value chain a real
++    anomaly there would plausibly move: upstream producers, midstream
++    processors/traders, downstream consumer-facing buyers, and adjacent
++    asset classes (farmland REITs, country ETFs).
++
++    This is a direct weather-conditions read, not an ENSO/El Nino index —
++    NASA does not publish the Oceanic Nino Index (that's a NOAA CPC product).
++    Sourced from NASA POWER (power.larc.nasa.gov) — free, no API key required.
++    """
++    result = await climate.get_climate_risk_watch()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_climate_stress_backtest(period: str = "el_nino_2015_16") -> str:
++    """Get REAL historical price moves for the climate-watch tickers during a
++    verified past super El Nino — checks whether the region/commodity/equity
++    links in terminalq_get_climate_risk_watch are more than a theoretical
++    association.
++
++    Downloads actual daily closes (Yahoo Finance) for each region's commodity
++    futures proxy and linked equities across the full dated event window and
++    reports each ticker's real % change over that window. This is realized
++    history, not a live signal.
++
++    Args:
++        period: "el_nino_2015_16" (peak ONI +2.6 to +2.8, Nov-Dec 2015 — the
++            more recent, better-documented event) or "el_nino_1997_98" (peak
++            ONI +2.3 to +2.4, Nov-Dec 1997).
++    """
++    result = await climate.get_climate_stress_backtest(period)
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_metric_stress_backtest(event: str) -> str:
++    """Get REAL historical price moves for a metric's linked tickers during a
++    verified past instance of that metric crossing its warning threshold —
++    generalizes the climate-backtest pattern to VIX, credit spreads, and CPI
++    (Phase 1; more metrics can be added the same way).
++
++    Downloads actual daily closes (Yahoo Finance) for a curated set of
++    sector/asset tickers linked to the metric, across the dated historical
++    stress window, and reports each ticker's real % change over that window.
++
++    Args:
++        event: One of "vix_2008_gfc", "vix_2020_covid", "credit_2008_gfc",
++            "credit_2020_covid", "cpi_2021_22_surge".
++    """
++    result = await stress_backtest.get_metric_stress_backtest(event)
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_retail_sentiment() -> str:
++    """Get retail sentiment: AAII weekly survey + SPY options put/call ratio.
++
++    AAII (running since 1987) is the classic retail mood survey — a bull-bear
++    spread beyond ±10pp has historically been a contrarian signal. The SPY
++    put/call volume ratio is the options market's real-money version: above
++    ~1.2 = fear/heavy hedging, below ~0.7 = complacency.
++    Sourced from aaii.com and Yahoo Finance — free, no API key required.
++    """
++    result = await retail_sentiment.get_retail_sentiment()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_prediction_markets(topic: str = "Fed rate") -> str:
++    """Get real-money event probabilities from Polymarket for a topic.
++
++    Prediction markets price the crowd's real-money odds on future events — a
++    cross-check on model-implied reads. When the Fed-path tool and Polymarket's
++    "rate cut by X" market disagree, that gap flags a mispricing worth knowing.
++    Pass a free-text topic like "Fed rate", "recession 2026", or "CPI".
++    Sourced from Polymarket (Gamma public-search) — free, no API key required.
++    """
++    result = await prediction_markets.get_prediction_markets(topic)
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_dealer_gamma(symbol: str = "SPY") -> str:
++    """Get dealer-gamma options positioning: call/put walls and net GEX sign.
++
++    Where price shows what the market did, options positioning hints at why it is
++    pinned or about to break. Returns the call wall (likely resistance), put wall
++    (support), put/call open-interest ratio, and net dealer-gamma sign (positive =
++    volatility-dampening, negative = amplifying). Estimates from free Yahoo option
++    chains — directional, not a paid GEX feed; degrades gracefully on rate limits.
++    """
++    result = await options_flow.get_dealer_gamma(symbol)
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_correlation_regime(symbols: str = "") -> str:
++    """Detect whether cross-asset correlations are shifting vs their baseline.
++
++    A correlation snapshot shows how assets move together now; the change matters
++    more. Compares a recent ~1-month window against a ~1-quarter baseline and
++    flags when coupling tightens (everything correlating to 1 = diversification
++    failing, a risk-off tell) or loosens. Defaults to the cross-asset universe
++    (equities, bonds, commodities, dollar, crypto). Computed from Yahoo closes.
++    """
++    result = await correlation_regime.get_correlation_regime(symbols)
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_rsu_tax_analysis(marginal_rate: float = 0.32, ltcg_rate: float = 0.15) -> str:
++    """Estimate tax on upcoming RSU vests and frame the sell-vs-hold decision.
++
++    RSUs are taxed as ordinary income at vest on full value — that bill is owed
++    whether you sell or hold. Turns your ~/.terminalq/rsu-schedule.md into per-vest
++    tax estimates, upcoming totals, and plain-English guidance on diversifying
++    (sell) vs concentration risk (hold). Override the assumed rates via arguments.
++    Estimates only, NOT tax advice — confirm with a CPA.
++    """
++    result = await rsu_tax.get_rsu_tax_analysis(marginal_rate, ltcg_rate)
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_record_snapshot(
++    equity_regime: float | None = None,
++    crypto_regime: float | None = None,
++    btc: float | None = None,
++    eth: float | None = None,
++    fear_greed: float | None = None,
++    spx: float | None = None,
++    vix: float | None = None,
++    ten_year: float | None = None,
++    hy_spread: float | None = None,
++    gold: float | None = None,
++    wti: float | None = None,
++    dxy: float | None = None,
++    stablecoin_supply_b: float | None = None,
++    btc_etf_flow_m: float | None = None,
++    cpi_mom: float | None = None,
++    claims_k: float | None = None,
++    fed_path: str = "",
++    notes: str = "",
++    snapshot_date: str = "",
++) -> str:
++    """Record one Full Report snapshot to local history (for regime-score calibration).
++
++    Call this at the END of an FR run, passing the headline numbers the run already
++    computed: both regime scores, BTC/ETH, fear&greed, S&P, VIX, 10y yield, HY spread,
++    gold, WTI, DXY, stablecoin supply ($B), BTC ETF flow ($M), CPI m/m, claims (000s),
++    the fed-path string, and any watch-items as notes. Only non-empty fields are stored.
++    Builds the time series that terminalq_get_regime_history mines. Local-only, gitignored.
++    """
++    record = history.record_snapshot(
++        snapshot_date=snapshot_date or None,
++        equity_regime=equity_regime,
++        crypto_regime=crypto_regime,
++        btc=btc,
++        eth=eth,
++        fear_greed=fear_greed,
++        spx=spx,
++        vix=vix,
++        ten_year=ten_year,
++        hy_spread=hy_spread,
++        gold=gold,
++        wti=wti,
++        dxy=dxy,
++        stablecoin_supply_b=stablecoin_supply_b,
++        btc_etf_flow_m=btc_etf_flow_m,
++        cpi_mom=cpi_mom,
++        claims_k=claims_k,
++        fed_path=fed_path or None,
++        notes=notes or None,
++    )
++    return json.dumps({"recorded": record}, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_regime_history(forward_days: int = 30) -> str:
++    """Calibrate the regime scores: realized forward returns grouped by score band.
++
++    For every recorded FR snapshot, looks up what BTC (Crypto Regime) and the S&P
++    (Equity Regime) actually did `forward_days` later and groups the returns by band.
++    Answers "when my score was high, did forward returns reward it?" — turning the
++    academic weights into a track record checked on real prices. Honest about small
++    samples: early on it says the data isn't yet meaningful rather than overclaiming.
++    """
++    result = await regime_history.get_regime_history(forward_days)
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_log_prediction(
++    claim: str, symbol: str, direction: str, horizon_days: int = 30, baseline: float | None = None
++) -> str:
++    """Log a dated, falsifiable prediction to the ledger (graded later for a track record).
++
++    Args: claim (e.g. "BTC reclaims its 200-day"), symbol (yfinance, e.g. BTC-USD or ^GSPC),
++    direction ("up"/"down" vs baseline), horizon_days (when it comes due), baseline (the
++    current price/level — required for grading; pass the value the report is reacting to).
++    Turns the implicit calls each report makes into an accountable, gradable record.
++    """
++    record = history.log_prediction(claim, symbol, direction, horizon_days, baseline=baseline)
++    return json.dumps({"logged": record}, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_grade_predictions() -> str:
++    """Settle every due prediction against actual prices and report running accuracy.
++
++    Fetches the current price of each due prediction's symbol, compares to the baseline,
++    marks correct/incorrect, and returns ledger-wide accuracy. Use it to see where the
++    model is systematically right or wrong and down-weight signals that keep missing.
++    """
++    result = await prediction_grader.grade_open_predictions()
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_load_recent_reports(n: int = 7) -> str:
++    """Load the key sections of recent saved FR reports + the snapshot trend (weekly digest).
++
++    Returns just the regime-score, what-changed, and synthesis sections of the last n
++    reports, plus the structured metric series for the same window. Use this to narrate
++    the *arc* — how the regime evolved over the week — rather than reading whole reports.
++    """
++    result = await reports.load_recent_reports(n)
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_get_event_scenarios(days: int = 7) -> str:
++    """Assemble upcoming high-impact releases anchored to current readings (reaction function).
++
++    Bundles the FRED release calendar with the latest recorded regime snapshot so you can
++    pre-compute, for each event, what a hotter-vs-cooler print would mean for the Fed path,
++    rates, and risk assets — tied to today's regime. Walk into the print already knowing
++    your reaction instead of scrambling after.
++    """
++    result = await event_scenarios.get_event_scenarios(days)
++    return json.dumps(result, indent=2)
++
++
++@mcp.tool()
++@audited
++async def terminalq_speak(text: str, voice_name: str = "") -> str:
++    """Read a market briefing aloud through the Mac's built-in `say` (free, no key).
++
++    Pass a tight, spoken-style synthesis (you write it) to hear it instead of reading.
++    Optionally name a macOS voice (e.g. "Samantha"). macOS only; returns an error
++    elsewhere. No fal.ai, no API key, no per-use cost.
++    """
++    result = await voice.speak(text, voice_name)
++    return json.dumps(result, indent=2)
++
++
+ def main():
+     """Run the TerminalQ MCP server."""
+     log.info("Starting TerminalQ MCP server")
+diff --git a/tests/contracts/test_command_contracts.py b/tests/contracts/test_command_contracts.py
+index 5bd5a2b..5909455 100644
+--- a/tests/contracts/test_command_contracts.py
++++ b/tests/contracts/test_command_contracts.py
+@@ -42,8 +42,8 @@ class TestCommandFrontmatter:
+         assert "description" in command["frontmatter"], f"/{command['name']}: missing 'description' in frontmatter"
+ 
+ 
+-# Commands that are configuration/onboarding and don't invoke MCP tools
+-NO_TOOL_COMMANDS = {"tq-setup"}
++# Commands that are configuration/onboarding or delegate to a skill (not an MCP tool)
++NO_TOOL_COMMANDS = {"tq-setup", "tq-graph-reports"}
+ 
+ 
+ class TestCommandBody:
+diff --git a/tests/contracts/test_plugin_layout.py b/tests/contracts/test_plugin_layout.py
+index 480a412..59ab075 100644
+--- a/tests/contracts/test_plugin_layout.py
++++ b/tests/contracts/test_plugin_layout.py
+@@ -68,9 +68,7 @@ class TestSkillDirectories:
+ 
+         for skill_dir in skills_dir.iterdir():
+             if skill_dir.is_dir() and not skill_dir.name.startswith("."):
+-                assert (skill_dir / "SKILL.md").exists(), (
+-                    f"Skill directory '{skill_dir.name}' is missing SKILL.md"
+-                )
++                assert (skill_dir / "SKILL.md").exists(), f"Skill directory '{skill_dir.name}' is missing SKILL.md"
+ 
+ 
+ class TestHooksLayout:
+@@ -83,9 +81,17 @@ class TestHooksLayout:
+         assert "hooks" in data
+         assert isinstance(data["hooks"], dict), "hooks must be a dict keyed by event name"
+ 
+-        valid_events = {"PreToolUse", "PostToolUse", "Stop", "SubagentStop",
+-                        "SessionStart", "SessionEnd", "UserPromptSubmit",
+-                        "PreCompact", "Notification"}
++        valid_events = {
++            "PreToolUse",
++            "PostToolUse",
++            "Stop",
++            "SubagentStop",
++            "SessionStart",
++            "SessionEnd",
++            "UserPromptSubmit",
++            "PreCompact",
++            "Notification",
++        }
+         for event, matchers in data["hooks"].items():
+             assert event in valid_events, f"Unknown hook event: {event}"
+             assert isinstance(matchers, list), f"hooks[{event}] must be a list of matcher objects"
+@@ -115,6 +121,4 @@ class TestHooksLayout:
+                     parts = cmd_resolved.split()
+                     script = parts[-1] if len(parts) > 1 else parts[0]
+                     script_path = Path(script)
+-                    assert script_path.exists(), (
+-                        f"Hook in {event} references missing script: {script}"
+-                    )
++                    assert script_path.exists(), f"Hook in {event} references missing script: {script}"
+diff --git a/tests/contracts/test_skill_contracts.py b/tests/contracts/test_skill_contracts.py
+index d31e518..502608a 100644
+--- a/tests/contracts/test_skill_contracts.py
++++ b/tests/contracts/test_skill_contracts.py
+@@ -49,9 +49,7 @@ class TestSkillFrontmatter:
+ 
+     def test_description_length(self, skill):
+         desc = skill["frontmatter"].get("description", "")
+-        assert len(desc) >= 100, (
+-            f"{skill['name']}: description is {len(desc)} chars, need ≥100 for effective matching"
+-        )
++        assert len(desc) >= 100, f"{skill['name']}: description is {len(desc)} chars, need ≥100 for effective matching"
+ 
+ 
+ class TestSkillBody:
+@@ -85,9 +83,7 @@ class TestSkillBody:
+ 
+     def test_has_failure_modes(self, skill):
+         body = skill["body"].lower()
+-        assert "failure mode" in body or "## failure" in body, (
+-            f"{skill['name']}: missing Failure Modes section"
+-        )
++        assert "failure mode" in body or "## failure" in body, f"{skill['name']}: missing Failure Modes section"
+ 
+     def test_has_when_not_to_use(self, skill):
+         body = skill["body"].lower()
+diff --git a/tests/test_edgar.py b/tests/test_edgar.py
+index 62c8699..77acc92 100644
+--- a/tests/test_edgar.py
++++ b/tests/test_edgar.py
+@@ -14,11 +14,12 @@ def clear_caches(tmp_cache_dir):
+     pass
+ 
+ 
+-def _mock_response(json_data, status_code=200):
++def _mock_response(json_data=None, status_code=200, text=""):
+     """Create a mock httpx.Response."""
+     resp = MagicMock(spec=httpx.Response)
+     resp.status_code = status_code
+     resp.json.return_value = json_data
++    resp.text = text
+     resp.raise_for_status = MagicMock()
+     if status_code >= 400:
+         resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+@@ -167,3 +168,314 @@ async def test_unknown_statement_type():
+     result = await edgar.get_financials("AAPL", statement="unknown_type")
+     assert "error" in result
+     assert "Unknown statement type" in result["error"]
++
++
++# ---------------------------------------------------------------------------
++# Insider transactions (Form 4)
++# ---------------------------------------------------------------------------
++
++_FORM4_BUY_XML = """<?xml version="1.0"?>
++<ownershipDocument>
++  <reportingOwner>
++    <reportingOwnerId><rptOwnerName>COOK TIMOTHY D</rptOwnerName></reportingOwnerId>
++    <reportingOwnerRelationship><officerTitle>Chief Executive Officer</officerTitle></reportingOwnerRelationship>
++  </reportingOwner>
++  <nonDerivativeTable>
++    <nonDerivativeTransaction>
++      <transactionDate><value>2026-05-15</value></transactionDate>
++      <transactionAmounts>
++        <transactionShares><value>1000</value></transactionShares>
++        <transactionPricePerShare><value>200.0</value></transactionPricePerShare>
++        <transactionAcquiredDisposedCode><value>A</value></transactionAcquiredDisposedCode>
++      </transactionAmounts>
++    </nonDerivativeTransaction>
++  </nonDerivativeTable>
++</ownershipDocument>"""
++
++_FORM4_SELL_XML = """<?xml version="1.0"?>
++<ownershipDocument>
++  <reportingOwner>
++    <reportingOwnerId><rptOwnerName>JONES MARY</rptOwnerName></reportingOwnerId>
++    <reportingOwnerRelationship><officerTitle>Director</officerTitle></reportingOwnerRelationship>
++  </reportingOwner>
++  <nonDerivativeTable>
++    <nonDerivativeTransaction>
++      <transactionDate><value>2026-05-10</value></transactionDate>
++      <transactionAmounts>
++        <transactionShares><value>400</value></transactionShares>
++        <transactionPricePerShare><value>250.0</value></transactionPricePerShare>
++        <transactionAcquiredDisposedCode><value>D</value></transactionAcquiredDisposedCode>
++      </transactionAmounts>
++    </nonDerivativeTransaction>
++  </nonDerivativeTable>
++</ownershipDocument>"""
++
++
++async def test_get_insider_transactions():
++    """Returns parsed Form 4 buy/sell transactions with an aggregated summary."""
++    tickers_json = {"0": {"cik_str": 320193, "ticker": "AAPL", "title": "Apple Inc"}}
++    submissions_data = {
++        "name": "Apple Inc",
++        "filings": {
++            "recent": {
++                "form": ["10-K", "4", "4", "8-K"],
++                "accessionNumber": ["0001-23-000001", "0001-23-000002", "0001-23-000003", "0001-23-000004"],
++                "primaryDocument": ["doc1.htm", "xslF345X06/form4-buy.xml", "xslF345X06/form4-sell.xml", "doc4.htm"],
++            }
++        },
++    }
++
++    async def mock_get(url, **kwargs):
++        if "company_tickers" in url:
++            return _mock_response(tickers_json)
++        if "submissions" in url:
++            return _mock_response(submissions_data)
++        # The raw ownership XML lives at the accession root, not under the
++        # XSLT viewer subdirectory referenced by primaryDocument.
++        if "xslF345X06" in url:
++            return _mock_response(status_code=404)
++        if url.endswith("form4-buy.xml"):
++            return _mock_response(text=_FORM4_BUY_XML)
++        if url.endswith("form4-sell.xml"):
++            return _mock_response(text=_FORM4_SELL_XML)
++        return _mock_response({})
++
++    mock_client = AsyncMock()
++    mock_client.get = mock_get
++    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
++    mock_client.__aexit__ = AsyncMock(return_value=False)
++
++    with patch("terminalq.providers.edgar.httpx.AsyncClient", return_value=mock_client):
++        result = await edgar.get_insider_transactions("AAPL", limit=10)
++
++    assert result["symbol"] == "AAPL"
++    assert result["company_name"] == "Apple Inc"
++    assert len(result["transactions"]) == 2
++
++    buy = next(t for t in result["transactions"] if t["transaction_type"] == "buy")
++    assert buy["owner"] == "COOK TIMOTHY D"
++    assert buy["title"] == "Chief Executive Officer"
++    assert buy["shares"] == 1000
++    assert buy["value"] == 200000.0
++
++    sell = next(t for t in result["transactions"] if t["transaction_type"] == "sell")
++    assert sell["owner"] == "JONES MARY"
++    assert sell["shares"] == 400
++    assert sell["value"] == 100000.0
++
++    summary = result["summary"]
++    assert summary["total_buys"] == 1000
++    assert summary["total_sells"] == 400
++    assert summary["net_shares"] == 600
++    assert summary["net_value"] == 100000.0
++    assert result["source"] == "sec_edgar"
++
++
++async def test_get_insider_transactions_skips_unparseable():
++    """A Form 4 doc that fails to fetch is skipped; other transactions still returned."""
++    tickers_json = {"0": {"cik_str": 320193, "ticker": "AAPL", "title": "Apple Inc"}}
++    submissions_data = {
++        "name": "Apple Inc",
++        "filings": {
++            "recent": {
++                "form": ["4", "4"],
++                "accessionNumber": ["0001-23-000001", "0001-23-000002"],
++                "primaryDocument": ["form4-broken.xml", "form4-sell.xml"],
++            }
++        },
++    }
++
++    async def mock_get(url, **kwargs):
++        if "company_tickers" in url:
++            return _mock_response(tickers_json)
++        if "submissions" in url:
++            return _mock_response(submissions_data)
++        if "form4-broken.xml" in url:
++            return _mock_response(status_code=500)
++        if "form4-sell.xml" in url:
++            return _mock_response(text=_FORM4_SELL_XML)
++        return _mock_response({})
++
++    mock_client = AsyncMock()
++    mock_client.get = mock_get
++    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
++    mock_client.__aexit__ = AsyncMock(return_value=False)
++
++    with patch("terminalq.providers.edgar.httpx.AsyncClient", return_value=mock_client):
++        result = await edgar.get_insider_transactions("AAPL", limit=10)
++
++    assert len(result["transactions"]) == 1
++    assert result["transactions"][0]["owner"] == "JONES MARY"
++
++
++_INFOTABLE_XML = """<?xml version="1.0"?>
++<informationTable xmlns="http://www.sec.gov/edgar/document/thirteenf/informationtable">
++  <infoTable>
++    <nameOfIssuer>APPLE INC</nameOfIssuer>
++    <cusip>037833100</cusip>
++    <value>5000000</value>
++    <shrsOrPrnAmt>
++      <sshPrnamt>30000000</sshPrnamt>
++      <sshPrnamtType>SH</sshPrnamtType>
++    </shrsOrPrnAmt>
++  </infoTable>
++  <infoTable>
++    <nameOfIssuer>BANK OF AMERICA CORP</nameOfIssuer>
++    <cusip>060505104</cusip>
++    <value>3000000</value>
++    <shrsOrPrnAmt>
++      <sshPrnamt>100000000</sshPrnamt>
++      <sshPrnamtType>SH</sshPrnamtType>
++    </shrsOrPrnAmt>
++  </infoTable>
++  <infoTable>
++    <nameOfIssuer>COCA COLA CO</nameOfIssuer>
++    <cusip>191216100</cusip>
++    <value>2000000</value>
++    <shrsOrPrnAmt>
++      <sshPrnamt>50000000</sshPrnamt>
++      <sshPrnamtType>SH</sshPrnamtType>
++    </shrsOrPrnAmt>
++  </infoTable>
++</informationTable>"""
++
++_13F_SUBMISSIONS = {
++    "name": "Berkshire Hathaway Inc",
++    "filings": {
++        "recent": {
++            "form": ["10-K", "13F-HR", "13F-HR"],
++            "accessionNumber": ["0001-23-000001", "0001-23-000002", "0001-23-000003"],
++            "filingDate": ["2026-03-01", "2026-05-15", "2026-02-15"],
++        }
++    },
++}
++
++_13F_INDEX = {
++    "directory": {
++        "item": [
++            {"name": "primary_doc.xml", "type": "text.xml"},
++            {"name": "53405.xml", "type": "text.xml"},
++        ],
++        "name": "/Archives/edgar/data/1067983/000123000002",
++    }
++}
++
++
++def _13f_mock_get(submissions=_13F_SUBMISSIONS, index=_13F_INDEX, info_table=_INFOTABLE_XML):
++    async def mock_get(url, **kwargs):
++        if "submissions" in url:
++            return _mock_response(submissions)
++        if "index.json" in url:
++            return _mock_response(index)
++        if "53405.xml" in url:
++            return _mock_response(text=info_table)
++        return _mock_response({})
++
++    return mock_get
++
++
++async def test_get_13f_holdings():
++    """Returns top holdings sorted by value with percent-of-portfolio."""
++    mock_client = AsyncMock()
++    mock_client.get = _13f_mock_get()
++    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
++    mock_client.__aexit__ = AsyncMock(return_value=False)
++
++    with patch("terminalq.providers.edgar.httpx.AsyncClient", return_value=mock_client):
++        result = await edgar.get_13f_holdings("berkshire")
++
++    assert result["institution"] == "berkshire"
++    assert result["institution_name"] == "Berkshire Hathaway Inc"
++    assert result["cik"] == "0001067983"
++    assert result["report_date"] == "2026-05-15"
++    assert result["total_positions"] == 3
++    assert result["total_value_thousands_usd"] == 10000000
++
++    holdings = result["holdings"]
++    assert len(holdings) == 3
++    assert holdings[0]["issuer"] == "APPLE INC"
++    assert holdings[0]["value_thousands_usd"] == 5000000
++    assert holdings[0]["shares"] == 30000000
++    assert holdings[0]["pct_of_portfolio"] == 50.0
++    assert holdings[1]["issuer"] == "BANK OF AMERICA CORP"
++    assert holdings[2]["issuer"] == "COCA COLA CO"
++    assert result["source"] == "sec_edgar"
++
++
++async def test_get_13f_holdings_limit():
++    """Limit truncates returned holdings but totals reflect the full portfolio."""
++    mock_client = AsyncMock()
++    mock_client.get = _13f_mock_get()
++    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
++    mock_client.__aexit__ = AsyncMock(return_value=False)
++
++    with patch("terminalq.providers.edgar.httpx.AsyncClient", return_value=mock_client):
++        result = await edgar.get_13f_holdings("berkshire", limit=2)
++
++    assert len(result["holdings"]) == 2
++    assert result["total_positions"] == 3
++    assert result["total_value_thousands_usd"] == 10000000
++    assert result["holdings"][1]["issuer"] == "BANK OF AMERICA CORP"
++
++
++async def test_get_13f_holdings_unknown_institution():
++    """Unknown institution returns an error without making any network call."""
++    result = await edgar.get_13f_holdings("not_a_fund")
++    assert "error" in result
++    assert result["source"] == "sec_edgar"
++
++
++async def test_get_13f_holdings_no_13f_filing():
++    """No 13F-HR filing in submissions returns an error dict."""
++    submissions = {
++        "name": "Berkshire Hathaway Inc",
++        "filings": {
++            "recent": {
++                "form": ["10-K"],
++                "accessionNumber": ["0001-23-000001"],
++                "filingDate": ["2026-03-01"],
++            }
++        },
++    }
++
++    mock_client = AsyncMock()
++    mock_client.get = _13f_mock_get(submissions=submissions)
++    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
++    mock_client.__aexit__ = AsyncMock(return_value=False)
++
++    with patch("terminalq.providers.edgar.httpx.AsyncClient", return_value=mock_client):
++        result = await edgar.get_13f_holdings("berkshire")
++
++    assert "error" in result
++    assert result["source"] == "sec_edgar"
++
++
++async def test_get_insider_transactions_no_form4_filings():
++    """No Form 4 filings returns an empty list and a zeroed summary."""
++    tickers_json = {"0": {"cik_str": 320193, "ticker": "AAPL", "title": "Apple Inc"}}
++    submissions_data = {
++        "name": "Apple Inc",
++        "filings": {
++            "recent": {
++                "form": ["10-K"],
++                "accessionNumber": ["0001-23-000001"],
++                "primaryDocument": ["doc1.htm"],
++            }
++        },
++    }
++
++    async def mock_get(url, **kwargs):
++        if "company_tickers" in url:
++            return _mock_response(tickers_json)
++        return _mock_response(submissions_data)
++
++    mock_client = AsyncMock()
++    mock_client.get = mock_get
++    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
++    mock_client.__aexit__ = AsyncMock(return_value=False)
++
++    with patch("terminalq.providers.edgar.httpx.AsyncClient", return_value=mock_client):
++        result = await edgar.get_insider_transactions("AAPL")
++
++    assert result["transactions"] == []
++    assert result["summary"]["net_shares"] == 0
+diff --git a/tests/test_fred.py b/tests/test_fred.py
+index 34f23f1..f446b92 100644
+--- a/tests/test_fred.py
++++ b/tests/test_fred.py
+@@ -5,7 +5,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
+ import httpx
+ import pytest
+ 
+-from terminalq.providers import fred
++from terminalq.analytics import fred_archive
++from terminalq.providers import fred, fred_ext
+ 
+ 
+ @pytest.fixture(autouse=True)
+@@ -32,7 +33,7 @@ def _mock_response(json_data, status_code=200):
+ 
+ async def test_get_series(monkeypatch):
+     """get_series returns structured observations."""
+-    monkeypatch.setattr("terminalq.providers.fred.FRED_API_KEY", "test_key_123")
++    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "test_key_123")
+ 
+     obs_data = {
+         "observations": [
+@@ -53,7 +54,7 @@ async def test_get_series(monkeypatch):
+     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+     mock_client.__aexit__ = AsyncMock(return_value=False)
+ 
+-    with patch("terminalq.providers.fred.httpx.AsyncClient", return_value=mock_client):
++    with patch("terminalq.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
+         result = await fred.get_series("CPIAUCSL", limit=2)
+ 
+     assert result["series_id"] == "CPIAUCSL"
+@@ -65,7 +66,7 @@ async def test_get_series(monkeypatch):
+ 
+ async def test_alias_resolution(monkeypatch):
+     """Human-friendly aliases resolve to FRED series IDs."""
+-    monkeypatch.setattr("terminalq.providers.fred.FRED_API_KEY", "test_key_123")
++    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "test_key_123")
+ 
+     obs_data = {"observations": [{"date": "2026-01-01", "value": "27000"}]}
+     info_data = {"seriess": [{"title": "GDP", "frequency": "Quarterly", "units": "Billions of Dollars"}]}
+@@ -80,7 +81,7 @@ async def test_alias_resolution(monkeypatch):
+     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+     mock_client.__aexit__ = AsyncMock(return_value=False)
+ 
+-    with patch("terminalq.providers.fred.httpx.AsyncClient", return_value=mock_client):
++    with patch("terminalq.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
+         result = await fred.get_series("gdp", limit=1)
+ 
+     # "gdp" should resolve to "GDP" series ID
+@@ -98,7 +99,7 @@ async def test_missing_key(monkeypatch):
+ 
+ async def test_dashboard(monkeypatch):
+     """Dashboard fetches multiple indicators and aggregates them."""
+-    monkeypatch.setattr("terminalq.providers.fred.FRED_API_KEY", "test_key_123")
++    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "test_key_123")
+ 
+     obs_data = {
+         "observations": [
+@@ -118,7 +119,7 @@ async def test_dashboard(monkeypatch):
+     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+     mock_client.__aexit__ = AsyncMock(return_value=False)
+ 
+-    with patch("terminalq.providers.fred.httpx.AsyncClient", return_value=mock_client):
++    with patch("terminalq.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
+         result = await fred.get_economic_dashboard()
+ 
+     assert "indicators" in result
+@@ -135,7 +136,7 @@ async def test_dashboard(monkeypatch):
+ 
+ async def test_dot_value_skip(monkeypatch):
+     """Observations with value '.' are skipped."""
+-    monkeypatch.setattr("terminalq.providers.fred.FRED_API_KEY", "test_key_123")
++    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "test_key_123")
+ 
+     obs_data = {
+         "observations": [
+@@ -156,10 +157,222 @@ async def test_dot_value_skip(monkeypatch):
+     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+     mock_client.__aexit__ = AsyncMock(return_value=False)
+ 
+-    with patch("terminalq.providers.fred.httpx.AsyncClient", return_value=mock_client):
++    with patch("terminalq.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
+         result = await fred.get_series("DFF", limit=3)
+ 
+     # Only 1 observation should remain (the two "." entries skipped)
+     assert len(result["observations"]) == 1
+     assert result["observations"][0]["value"] == 4.5
+     assert result["latest_value"] == 4.5
++
++
++async def test_get_liquidity_dashboard(monkeypatch):
++    """Liquidity dashboard fetches Fed balance sheet, RRP, TGA and computes net liquidity."""
++    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "test_key_123")
++
++    info_data = {"seriess": [{"title": "Test Series", "frequency": "Weekly", "units": "Billions of Dollars"}]}
++
++    # WALCL and WTREGEN in $ millions, RRP in $ billions
++    series_values = {
++        "WALCL": [{"date": "2026-06-04", "value": "7800000"}, {"date": "2026-05-28", "value": "7750000"}],
++        "RRPONTSYD": [{"date": "2026-06-08", "value": "300"}, {"date": "2026-06-07", "value": "320"}],
++        "WTREGEN": [{"date": "2026-06-08", "value": "700000"}, {"date": "2026-06-07", "value": "680000"}],
++    }
++
++    async def mock_get(url, **kwargs):
++        if "observations" in url:
++            series_id = kwargs["params"]["series_id"]
++            return _mock_response({"observations": series_values[series_id]})
++        return _mock_response(info_data)
++
++    mock_client = AsyncMock()
++    mock_client.get = mock_get
++    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
++    mock_client.__aexit__ = AsyncMock(return_value=False)
++
++    with patch("terminalq.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
++        result = await fred_ext.get_liquidity_dashboard()
++
++    assert result["source"] == "fred"
++    indicators = result["indicators"]
++    assert indicators["fed_balance_sheet"]["latest_value"] == 7800000
++    assert indicators["reverse_repo"]["latest_value"] == 300
++    assert indicators["treasury_general_account"]["latest_value"] == 700000
++    # net_liquidity = (7,800,000 / 1000) - 300 - (700,000 / 1000) = 6800
++    assert result["net_liquidity_proxy_billions"] == 6800
++    assert "note" in result
++
++
++async def test_get_liquidity_dashboard_missing_key(monkeypatch):
++    """Liquidity dashboard returns an error dict when FRED_API_KEY is missing."""
++    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "")
++
++    result = await fred_ext.get_liquidity_dashboard()
++    assert "error" in result
++    assert result["source"] == "fred"
++
++
++async def test_get_rates_dashboard(monkeypatch):
++    """Rates dashboard fetches yields, real yields, and breakeven inflation."""
++    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "test_key_123")
++
++    obs_data = {
++        "observations": [
++            {"date": "2026-06-08", "value": "4.5"},
++            {"date": "2026-06-07", "value": "4.4"},
++        ]
++    }
++    info_data = {"seriess": [{"title": "Test Rate", "frequency": "Daily", "units": "Percent"}]}
++
++    async def mock_get(url, **kwargs):
++        if "observations" in url:
++            return _mock_response(obs_data)
++        return _mock_response(info_data)
++
++    mock_client = AsyncMock()
++    mock_client.get = mock_get
++    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
++    mock_client.__aexit__ = AsyncMock(return_value=False)
++
++    with patch("terminalq.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
++        result = await fred_ext.get_rates_dashboard()
++
++    assert result["source"] == "fred"
++    indicators = result["indicators"]
++    for alias in ["10y_yield", "2y_yield", "yield_spread", "tips_10y", "tips_5y", "breakeven_10y", "breakeven_5y"]:
++        assert alias in indicators
++        assert indicators[alias]["latest_value"] == 4.5
++    assert "note" in result
++
++
++async def test_get_rates_dashboard_missing_key(monkeypatch):
++    """Rates dashboard returns an error dict when FRED_API_KEY is missing."""
++    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "")
++
++    result = await fred_ext.get_rates_dashboard()
++    assert "error" in result
++    assert result["source"] == "fred"
++
++
++def test_series_map_uses_valid_fred_ids():
++    """Regression: JOLTS layoffs and consumer delinquency must use real FRED series IDs."""
++    # JTSLAL does not exist on FRED — layoffs & discharges is JTSLDL
++    assert fred.SERIES_MAP["jolts_layoffs"] == "JTSLDL"
++    # DRBLACBS is BUSINESS loans — consumer loans is DRCLACBS
++    assert fred.SERIES_MAP["consumer_delinquency"] == "DRCLACBS"
++    assert "auto_delinquency" not in fred.SERIES_MAP
++    # GOLDAMGBD228NLBX was discontinued on FRED — gold now comes from Yahoo
++    assert "gold_price" not in fred.SERIES_MAP
++    assert "GOLDAMGBD228NLBX" not in fred.INTRADAY_SERIES
++
++
++async def test_consumer_health_reports_consumer_delinquency(monkeypatch):
++    """Consumer health dashboard uses the renamed consumer_delinquency indicator."""
++    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "test_key_123")
++
++    obs_data = {
++        "observations": [
++            {"date": "2026-01-01", "value": "2.5"},
++            {"date": "2025-10-01", "value": "2.4"},
++        ]
++    }
++    info_data = {"seriess": [{"title": "Test", "frequency": "Quarterly", "units": "Percent"}]}
++
++    async def mock_get(url, **kwargs):
++        if "observations" in url:
++            return _mock_response(obs_data)
++        return _mock_response(info_data)
++
++    mock_client = AsyncMock()
++    mock_client.get = mock_get
++    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
++    mock_client.__aexit__ = AsyncMock(return_value=False)
++
++    with patch("terminalq.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
++        result = await fred_ext.get_consumer_health_dashboard()
++
++    assert "consumer_delinquency" in result["indicators"]
++    assert "auto_delinquency" not in result["indicators"]
++
++
++async def test_commodities_gold_from_yahoo(monkeypatch):
++    """Commodities dashboard sources gold from Yahoo (FRED series discontinued)."""
++    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "test_key_123")
++
++    obs_data = {
++        "observations": [
++            {"date": "2026-06-08", "value": "95.0"},
++            {"date": "2026-06-07", "value": "94.0"},
++        ]
++    }
++    info_data = {"seriess": [{"title": "Test", "frequency": "Daily", "units": "Dollars"}]}
++
++    async def mock_get(url, **kwargs):
++        if "observations" in url:
++            return _mock_response(obs_data)
++        return _mock_response(info_data)
++
++    mock_client = AsyncMock()
++    mock_client.get = mock_get
++    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
++    mock_client.__aexit__ = AsyncMock(return_value=False)
++
++    gold_entry = {
++        "latest_value": 4150.0,
++        "latest_date": "2026-06-09",
++        "previous_value": 4100.0,
++        "change": 50.0,
++        "title": "Gold Futures Front Month (COMEX GC=F)",
++        "units": "Dollars per Troy Ounce",
++        "frequency": "Daily",
++        "source": "yahoo_finance",
++    }
++
++    with (
++        patch("terminalq.providers.fred_ext.httpx.AsyncClient", return_value=mock_client),
++        patch(
++            "terminalq.providers.market_data.fetch_gold_dashboard_entry",
++            new=AsyncMock(return_value=gold_entry),
++        ),
++    ):
++        result = await fred_ext.get_commodities_dashboard()
++
++    indicators = result["indicators"]
++    assert indicators["gold_price"]["latest_value"] == 4150.0
++    assert indicators["gold_price"]["source"] == "yahoo_finance"
++    assert indicators["wti_oil"]["latest_value"] == 95.0
++
++
++@pytest.fixture
++def tmp_fred_archive_dir(tmp_path, monkeypatch):
++    """Isolate get_series_history's archive merge from the real ~/.terminalq/."""
++    monkeypatch.setattr(fred_archive, "ARCHIVE_DIR", tmp_path)
++    return tmp_path
++
++
++async def test_get_series_history_merges_with_local_archive(monkeypatch, tmp_fred_archive_dir):
++    """A restricted-history series (e.g. ICE BofA spreads) should return the
++    permanently-archived earlier history merged with today's live fetch,
++    not just whatever narrow window the live API currently serves."""
++    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "test_key_123")
++
++    seed = {
++        "series_id": "BAMLH0A0HYM2",
++        "values": [{"date": "1996-12-31", "value": 3.13}, {"date": "2008-12-15", "value": 21.82}],
++    }
++    (tmp_fred_archive_dir / "BAMLH0A0HYM2_seed.json").write_text(__import__("json").dumps(seed))
++
++    live_obs = {"observations": [{"date": "2026-07-06", "value": "2.75"}]}
++    mock_client = AsyncMock()
++    mock_client.get = AsyncMock(return_value=_mock_response(live_obs))
++    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
++    mock_client.__aexit__ = AsyncMock(return_value=False)
++
++    with patch("terminalq.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
++        result = await fred_ext.get_series_history("BAMLH0A0HYM2")
++
++    assert result["start_date"] == "1996-12-31"
++    assert result["live_api_start_date"] == "2026-07-06"
++    assert result["values"][0] == 3.13
++    assert result["values"][-1] == 2.75
++    assert result["source"] == "fred (live) + local archive"
+diff --git a/tests/test_search.py b/tests/test_search.py
+index 83dceae..8d660cc 100644
+--- a/tests/test_search.py
++++ b/tests/test_search.py
+@@ -1,4 +1,4 @@
+-"""Tests for terminalq.providers.search — Brave Search web search."""
++"""Tests for terminalq.providers.search — Brave Search with DuckDuckGo fallback."""
+ 
+ from unittest.mock import AsyncMock, MagicMock, patch
+ 
+@@ -58,14 +58,24 @@ def _mock_brave_response():
+     return resp
+ 
+ 
++_DDG_SUCCESS = {
++    "query": "any",
++    "total_results": 1,
++    "results": [{"title": "DDG Result", "url": "https://example.com/ddg", "description": "found", "age": ""}],
++    "news": [],
++    "source": "duckduckgo",
++}
++
++_DDG_FAILURE = {"error": "DuckDuckGo search failed", "source": "duckduckgo"}
++
++
+ # ---------------------------------------------------------------------------
+-# Success path
++# Brave path (key configured)
+ # ---------------------------------------------------------------------------
+ 
+ 
+ @patch("terminalq.providers.search.BRAVE_API_KEY", "test_brave_key")
+-async def test_web_search_success():
+-    """Successful search returns results and news."""
++async def test_web_search_uses_brave_when_key_configured():
+     mock_client = AsyncMock()
+     mock_client.get.return_value = _mock_brave_response()
+     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+@@ -76,32 +86,12 @@ async def test_web_search_success():
+ 
+     assert result["query"] == "AAPL stock"
+     assert result["total_results"] == 2
+-    assert len(result["results"]) == 2
+     assert result["results"][0]["title"] == "Apple Inc Stock"
+     assert len(result["news"]) == 1
+     assert result["source"] == "brave_search"
+     assert "usage" in result
+ 
+ 
+-# ---------------------------------------------------------------------------
+-# No API key
+-# ---------------------------------------------------------------------------
+-
+-
+-@patch("terminalq.providers.search.BRAVE_API_KEY", "")
+-async def test_web_search_no_api_key():
+-    """Returns error when BRAVE_API_KEY is not configured."""
+-    result = await search.web_search("test query")
+-    assert "error" in result
+-    assert "BRAVE_API_KEY" in result["error"]
+-    assert result["source"] == "brave_search"
+-
+-
+-# ---------------------------------------------------------------------------
+-# Cache hit
+-# ---------------------------------------------------------------------------
+-
+-
+ @patch("terminalq.providers.search.BRAVE_API_KEY", "test_brave_key")
+ async def test_web_search_cache_hit():
+     """Second call uses cached result."""
+@@ -111,132 +101,131 @@ async def test_web_search_cache_hit():
+     mock_client.__aexit__ = AsyncMock(return_value=False)
+ 
+     with patch("terminalq.providers.search.httpx.AsyncClient", return_value=mock_client):
+-        result1 = await search.web_search("cached query", count=5)
+-        result2 = await search.web_search("cached query", count=5)
++        await search.web_search("cached query", count=5)
++        await search.web_search("cached query", count=5)
+ 
+-    assert result1["query"] == "cached query"
+-    assert result2["query"] == "cached query"
+-    # httpx client should only have been called once (second is cached)
+     assert mock_client.get.call_count == 1
+ 
+ 
+-# ---------------------------------------------------------------------------
+-# Budget exceeded
+-# ---------------------------------------------------------------------------
+-
+-
+ @patch("terminalq.providers.search.BRAVE_API_KEY", "test_brave_key")
+-async def test_web_search_budget_exceeded():
+-    """Returns error when monthly budget is exceeded."""
+-    mock_usage = {"calls_used": 2001, "calls_limit": 2000, "remaining": 0,
+-                  "provider": "brave_search", "month": "2026-03", "first_call": None, "last_call": None}
+-    with patch("terminalq.providers.search.usage_tracker.increment_and_check",
+-               new_callable=AsyncMock, return_value=(False, mock_usage)):
+-        result = await search.web_search("over budget query")
++async def test_web_search_empty_results():
++    empty_resp = MagicMock(spec=httpx.Response)
++    empty_resp.status_code = 200
++    empty_resp.json.return_value = {"web": {"results": []}, "news": {"results": []}}
++    empty_resp.raise_for_status = MagicMock()
+ 
+-    assert "error" in result
+-    assert "monthly limit" in result["error"].lower() or "limit reached" in result["error"]
+-    assert result["source"] == "brave_search"
++    mock_client = AsyncMock()
++    mock_client.get.return_value = empty_resp
++    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
++    mock_client.__aexit__ = AsyncMock(return_value=False)
+ 
++    with patch("terminalq.providers.search.httpx.AsyncClient", return_value=mock_client):
++        result = await search.web_search("obscure query nobody searches")
+ 
+-# ---------------------------------------------------------------------------
+-# HTTP errors
+-# ---------------------------------------------------------------------------
++    assert result["total_results"] == 0
++    assert result["results"] == []
+ 
+ 
+ @patch("terminalq.providers.search.BRAVE_API_KEY", "test_brave_key")
+-async def test_web_search_timeout():
+-    """Timeout returns error dict."""
++async def test_web_search_count_clamped():
+     mock_client = AsyncMock()
+-    mock_client.get.side_effect = httpx.TimeoutException("timed out")
++    mock_client.get.return_value = _mock_brave_response()
+     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+     mock_client.__aexit__ = AsyncMock(return_value=False)
+ 
+     with patch("terminalq.providers.search.httpx.AsyncClient", return_value=mock_client):
+-        result = await search.web_search("timeout query")
++        await search.web_search("clamped query", count=50)
+ 
+-    assert "error" in result
+-    assert "timed out" in result["error"]
+-    assert result["source"] == "brave_search"
++    call_kwargs = mock_client.get.call_args
++    assert call_kwargs[1]["params"]["count"] == 20
+ 
+ 
+-@patch("terminalq.providers.search.BRAVE_API_KEY", "test_brave_key")
+-async def test_web_search_http_error():
+-    """HTTP status error returns error dict."""
+-    mock_resp = MagicMock(spec=httpx.Response)
+-    mock_resp.status_code = 429
+-    mock_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+-        "Rate limited", request=MagicMock(), response=mock_resp
+-    )
++# ---------------------------------------------------------------------------
++# DuckDuckGo default (no key) and fallback paths
++# ---------------------------------------------------------------------------
+ 
+-    mock_client = AsyncMock()
+-    mock_client.get.return_value = mock_resp
+-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+-    mock_client.__aexit__ = AsyncMock(return_value=False)
+ 
+-    with patch("terminalq.providers.search.httpx.AsyncClient", return_value=mock_client):
+-        result = await search.web_search("rate limited query")
++@patch("terminalq.providers.search.BRAVE_API_KEY", "")
++async def test_web_search_no_key_uses_duckduckgo():
++    """Without BRAVE_API_KEY the keyless DuckDuckGo provider is the default."""
++    with patch.object(search, "_ddg_search", AsyncMock(return_value=_DDG_SUCCESS)) as ddg:
++        result = await search.web_search("test query")
+ 
+-    assert "error" in result
+-    assert "429" in result["error"]
+-    assert result["source"] == "brave_search"
++    ddg.assert_awaited_once()
++    assert result["source"] == "duckduckgo"
++    assert result["results"][0]["title"] == "DDG Result"
+ 
+ 
+ @patch("terminalq.providers.search.BRAVE_API_KEY", "test_brave_key")
+-async def test_web_search_connect_error():
+-    """Connection error returns error dict."""
++async def test_web_search_brave_failure_falls_back_to_duckduckgo():
++    """A Brave outage degrades to DuckDuckGo instead of returning an error."""
+     mock_client = AsyncMock()
+     mock_client.get.side_effect = httpx.ConnectError("Connection refused")
+     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+     mock_client.__aexit__ = AsyncMock(return_value=False)
+ 
+-    with patch("terminalq.providers.search.httpx.AsyncClient", return_value=mock_client):
++    with (
++        patch("terminalq.providers.search.httpx.AsyncClient", return_value=mock_client),
++        patch.object(search, "_ddg_search", AsyncMock(return_value=_DDG_SUCCESS)),
++    ):
+         result = await search.web_search("connect fail query")
+ 
+-    assert "error" in result
+-    assert "Connection failed" in result["error"]
+-    assert result["source"] == "brave_search"
++    assert result["source"] == "duckduckgo"
+ 
+ 
+-# ---------------------------------------------------------------------------
+-# Edge cases
+-# ---------------------------------------------------------------------------
++@patch("terminalq.providers.search.BRAVE_API_KEY", "test_brave_key")
++async def test_web_search_budget_exceeded_falls_back_to_duckduckgo():
++    """Exhausting the Brave monthly quota degrades to free DuckDuckGo."""
++    mock_usage = {
++        "calls_used": 2001,
++        "calls_limit": 2000,
++        "remaining": 0,
++        "provider": "brave_search",
++        "month": "2026-03",
++        "first_call": None,
++        "last_call": None,
++    }
++    with (
++        patch(
++            "terminalq.providers.search.usage_tracker.increment_and_check",
++            new_callable=AsyncMock,
++            return_value=(False, mock_usage),
++        ),
++        patch.object(search, "_ddg_search", AsyncMock(return_value=_DDG_SUCCESS)),
++    ):
++        result = await search.web_search("over budget query")
+ 
++    assert result["source"] == "duckduckgo"
+ 
+-@patch("terminalq.providers.search.BRAVE_API_KEY", "test_brave_key")
+-async def test_web_search_empty_results():
+-    """Empty search results return zero total."""
+-    empty_resp = MagicMock(spec=httpx.Response)
+-    empty_resp.status_code = 200
+-    empty_resp.json.return_value = {"web": {"results": []}, "news": {"results": []}}
+-    empty_resp.raise_for_status = MagicMock()
+ 
++@patch("terminalq.providers.search.BRAVE_API_KEY", "test_brave_key")
++async def test_web_search_all_providers_failed_returns_error():
+     mock_client = AsyncMock()
+-    mock_client.get.return_value = empty_resp
++    mock_client.get.side_effect = httpx.TimeoutException("timed out")
+     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+     mock_client.__aexit__ = AsyncMock(return_value=False)
+ 
+-    with patch("terminalq.providers.search.httpx.AsyncClient", return_value=mock_client):
+-        result = await search.web_search("obscure query nobody searches")
++    with (
++        patch("terminalq.providers.search.httpx.AsyncClient", return_value=mock_client),
++        patch.object(search, "_ddg_search", AsyncMock(return_value=_DDG_FAILURE)),
++    ):
++        result = await search.web_search("everything is down")
+ 
+-    assert result["total_results"] == 0
+-    assert result["results"] == []
+-    assert result["news"] == []
++    assert "error" in result
+ 
+ 
+-@patch("terminalq.providers.search.BRAVE_API_KEY", "test_brave_key")
+-async def test_web_search_count_clamped():
+-    """Count is clamped to max 20."""
+-    mock_client = AsyncMock()
+-    mock_client.get.return_value = _mock_brave_response()
+-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+-    mock_client.__aexit__ = AsyncMock(return_value=False)
++# ---------------------------------------------------------------------------
++# DuckDuckGo row mapping
++# ---------------------------------------------------------------------------
+ 
+-    with patch("terminalq.providers.search.httpx.AsyncClient", return_value=mock_client):
+-        result = await search.web_search("clamped query", count=50)
+ 
+-    # Should still succeed (count is clamped internally)
+-    assert result["source"] == "brave_search"
+-    # Verify the API was called with count=20 (clamped from 50)
+-    call_kwargs = mock_client.get.call_args
+-    assert call_kwargs[1]["params"]["count"] == 20
++def test_map_ddg_rows_normalizes_fields():
++    rows = [
++        {"title": "T1", "href": "https://a.example", "body": "B1"},
++        {"title": "T2", "href": "https://b.example", "body": "B2"},
++    ]
++
++    mapped = search._map_ddg_rows(rows)
++
++    assert mapped[0] == {"title": "T1", "url": "https://a.example", "description": "B1", "age": ""}
++    assert len(mapped) == 2
