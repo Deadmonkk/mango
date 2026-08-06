@@ -7,7 +7,7 @@ from pathlib import Path
 
 import httpx
 
-from terminalq import cache
+from terminalq.mango import cache
 from terminalq._lazy_yfinance import yfinance
 from terminalq.ext_settings import (
     BTC_VALUATION_CROSSCHECK_TOLERANCE_PCT,
@@ -23,7 +23,7 @@ from terminalq.ext_settings import (
     MVRV_SOURCE_AGREEMENT_TOLERANCE_PCT,
     MVRV_UNDERVALUED,
 )
-from terminalq.logging_config import log
+from terminalq.mango.logging import log
 from terminalq.providers import mempool, yahoo_crypto
 from terminalq.providers.coingecko import BASE_URL, _fetch, _resolve_id
 

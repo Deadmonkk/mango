@@ -10,9 +10,9 @@ historical snapshots (both windows come from one 6-month price pull).
 
 import asyncio
 
-from terminalq.logging_config import log
+from terminalq.mango.logging import log
 
-from terminalq import cache
+from terminalq.mango import cache
 from terminalq.analytics.correlation import DEFAULT_UNIVERSE, _fetch_closes
 from terminalq.ext_settings import (
     CACHE_TTL_CORRELATION_REGIME,

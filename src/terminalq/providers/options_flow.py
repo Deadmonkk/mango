@@ -15,9 +15,9 @@ import asyncio
 import math
 from datetime import datetime, timezone
 
-from terminalq.logging_config import log
+from terminalq.mango.logging import log
 
-from terminalq import cache
+from terminalq.mango import cache
 from terminalq._lazy_yfinance import yfinance
 from terminalq.ext_settings import CACHE_TTL_OPTIONS_GAMMA, OPTIONS_GAMMA_EXPIRIES
 

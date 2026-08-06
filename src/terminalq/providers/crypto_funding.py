@@ -35,8 +35,8 @@ import json
 
 import httpx
 
-from terminalq import cache
-from terminalq.logging_config import log
+from terminalq.mango import cache
+from terminalq.mango.logging import log
 
 # --- thresholds (named, not inline) --------------------------------------
 MIN_CONTRACT_OI_USD = 1_000_000_000.0   # only venues with >$1B OI carry weight

@@ -10,9 +10,9 @@ import io
 
 import httpx
 
-from terminalq import cache
+from terminalq.mango import cache
 from terminalq.ext_settings import CACHE_TTL_ONCHAIN
-from terminalq.logging_config import log
+from terminalq.mango.logging import log
 
 
 # ---------------------------------------------------------------------------

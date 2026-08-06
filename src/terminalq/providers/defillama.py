@@ -3,10 +3,10 @@
 import asyncio
 
 import httpx
-from terminalq.logging_config import log
-from terminalq.rate_limiter import RateLimiter
+from terminalq.mango.logging import log
+from terminalq.mango.limiter import RateLimiter
 
-from terminalq import cache
+from terminalq.mango import cache
 from terminalq.ext_settings import (
     CACHE_TTL_DEFI,
     CACHE_TTL_STABLECOINS,

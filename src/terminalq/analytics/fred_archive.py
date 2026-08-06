@@ -37,7 +37,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from terminalq.logging_config import log
+from terminalq.mango.logging import log
 
 from terminalq.ext_settings import PORTFOLIO_DIR
 

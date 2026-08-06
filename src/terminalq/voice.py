@@ -10,7 +10,7 @@ import asyncio
 import subprocess
 import sys
 
-from terminalq.logging_config import log
+from terminalq.mango.logging import log
 
 MAX_SPEAK_CHARS = 4000  # ~5 minutes of speech; keep briefings tight
 SPEAK_TIMEOUT_S = 180

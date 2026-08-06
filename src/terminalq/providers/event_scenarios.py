@@ -8,7 +8,7 @@ so the command can write the scenario for each event against today's regime,
 instead of reasoning in a vacuum.
 """
 
-from terminalq.logging_config import log
+from terminalq.mango.logging import log
 
 from terminalq.history import latest_snapshot_per_day
 from terminalq.providers import fred

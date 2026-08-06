@@ -9,7 +9,7 @@ every word of every report.
 
 import re
 
-from terminalq.logging_config import log
+from terminalq.mango.logging import log
 
 from terminalq.ext_settings import REPORTS_DIR
 from terminalq.history import latest_snapshot_per_day

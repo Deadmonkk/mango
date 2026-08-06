@@ -16,10 +16,10 @@ import datetime as dt
 
 import httpx
 
-from terminalq import cache
+from terminalq.mango import cache
 from terminalq.analytics import fred_archive
 from terminalq.ext_settings import CACHE_TTL_ECONOMIC, FRED_API_KEY
-from terminalq.logging_config import log
+from terminalq.mango.logging import log
 from terminalq.providers.fred import BASE_URL, SERIES_MAP, _resolve_series_id, get_series
 
 # Aliases this pack adds. Merged into upstream's SERIES_MAP on import so

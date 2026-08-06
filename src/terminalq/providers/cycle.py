@@ -9,9 +9,9 @@ nowcast. Fills the 'cycle position' layer of a top-down framework.
 import asyncio
 import statistics
 
-from terminalq.logging_config import log
+from terminalq.mango.logging import log
 
-from terminalq import cache
+from terminalq.mango import cache
 from terminalq.ext_settings import (
     CACHE_TTL_CYCLE,
     CLAIMS_DETERIORATION_PCT,

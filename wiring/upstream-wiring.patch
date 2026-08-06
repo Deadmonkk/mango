@@ -2527,6 +2527,46 @@ index a0c4b62..4631b84 100644
  def main():
      """Run the TerminalQ MCP server."""
      log.info("Starting TerminalQ MCP server")
+diff --git a/tests/conftest.py b/tests/conftest.py
+index 249f268..af1047b 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -71,10 +71,34 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
+     return fm, body
+ 
+ 
++@pytest.fixture(autouse=True)
++def _never_touch_the_real_cache(tmp_path_factory, monkeypatch):
++    """Redirect both caches for EVERY test, whether or not it asks.
++
++    Opt-in isolation is the wrong shape here: a single test that forgets the
++    fixture writes fixture values into the operator's live cache, where a later
++    run serves them as real data. On 2026-08-06 that put a fabricated CAPE of
++    35.0 into the live cache. Tests needing to inspect cache files should still
++    request `tmp_cache_dir`; this fixture only guarantees the floor.
++    """
++    sink = tmp_path_factory.mktemp("cache-sink")
++    monkeypatch.setattr("terminalq.cache.CACHE_DIR", sink)
++    monkeypatch.setattr("terminalq.mango.cache.CACHE_DIR", sink)
++    monkeypatch.setenv("CACHE_DIR", str(sink))
++
++
+ @pytest.fixture
+ def tmp_cache_dir(tmp_path, monkeypatch):
+-    """Provide isolated cache directory."""
++    """Provide isolated cache directory.
++
++    Both cache implementations must be redirected. Missing either one lets a
++    test write fixture values into the operator's real cache, where a later run
++    serves them as live data — which is how a fabricated CAPE reached the live
++    cache on 2026-08-06.
++    """
+     monkeypatch.setattr("terminalq.cache.CACHE_DIR", tmp_path)
++    monkeypatch.setattr("terminalq.mango.cache.CACHE_DIR", tmp_path)
++    monkeypatch.setenv("CACHE_DIR", str(tmp_path))
+     return tmp_path
+ 
+ 
 diff --git a/tests/contracts/test_command_contracts.py b/tests/contracts/test_command_contracts.py
 index 5bd5a2b..5909455 100644
 --- a/tests/contracts/test_command_contracts.py
