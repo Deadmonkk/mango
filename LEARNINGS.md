@@ -181,17 +181,144 @@ against those, all 561 tests pass.
 
 ---
 
+## 4. Cached errors turned a blip into an outage
+
+**What happened.** A FRED API timeout during a collector run was cached as-is. One
+hour later, the next scheduled run replayed 24 "data unavailable" cells in 0.0
+seconds — indistinguishable from a live outage, but only because the cache was
+inspectable plain JSON files. The silent damage: the Equity Regime Score reads a
+CCC−BB credit gap. When the gap was missing, the scoring component applied no
+penalty. An API blip rendered as the most bullish possible credit reading.
+
+**Why it happened.** Providers return errors as dicts rather than raising exceptions,
+and the cache stored those error dicts alongside real payloads without distinction.
+
+**What changed.**
+- Cache now never persists a payload containing an error, partial failures included.
+- A scoring component that cannot be verified is dropped and the weights
+  renormalised, rather than scored as if the half that happens to be present is
+  sufficient.
+
+> **Rule: never cache an error.** When errors are cached with TTL they degrade
+> silently and repeatedly — indistinguishable from a live outage to anything that
+> does not read the cache file directly.
+>
+> **Rule: missing inputs do not score as neutral.** A score built on half the data
+> is worse than no score: it is a lie that looks authoritative. Drop incomplete
+> components and renormalize the remaining weights.
+
+---
+
+## 5. Isolation and recovery that broke
+
+Two separate incidents, same lesson.
+
+### Opt-in test isolation let fixtures reach live storage
+
+Tests that wanted to avoid polluting live storage could request a fixture that
+redirected the cache directory. When owned code moved to a new cache module, tests
+that did not request the fixture wrote into the operator's real cache — 67 files
+over the course of the test run, including a fabricated CAPE of 35.0, which a
+later report run would have served as real data.
+
+**Why it happened.** Storage isolation was opt-in, not autouse. Tests had to
+remember to request it.
+
+### A destructive git command in a borrowed checkout
+
+A working directory was a clone of a third-party repository carrying thousands of
+lines of uncommitted local modification. An automated helper ran `git stash` while
+debugging something unrelated, reverting 17 files at once. Recovery came from a
+patch file captured an hour earlier. Two files (`pyproject.toml`, `CLAUDE.md`) sat
+outside that patch's path filter and survived only by luck.
+
+**Why it happened.** The helper was testing git operations and did not check which
+repository it was in before running a destructive command. The backup's path filter
+was narrower than the work it protected.
+
+**What changed.**
+- Storage isolation is now autouse; tests do not have to remember to opt in.
+  Resolve cache directories once at import into a module constant, so they can be
+  patched by fixtures — per-call environment lookups silently bypass the fixture.
+- No git commands run in a borrowed checkout.
+- Backups are verified to cover the entire working set before trusting them.
+
+> **Rule: isolation is not automatic when it is optional.** Tests that forget to
+> request a fixture pollute live storage. Make the fixture autouse if something
+> must be isolated to be safe.
+>
+> **Rule: don't run git in a borrowed checkout.** A `git stash` is as irreversible
+> as `rm` for uncommitted work. A borrowed repo carrying local modifications is not
+> a place to test git commands.
+>
+> **Rule: a backup must cover everything at risk.** A patch covering 15 of 17
+> destroyed files is not a backup — it is a trap.
+
+---
+
+## 6. An API key was written into audit artifacts
+
+**What happened.** The HTTP client errors quote the failing URL. For a keyed API,
+the URL carries the key. The collector stored error strings verbatim into audit
+files in a user-facing folder — eleven occurrences. The published site never read
+that folder, so exposure stayed local, but three keys were visible to anyone with
+filesystem access.
+
+**Why it happened.** Error-handling logged the full response without redaction.
+Audit artifacts were assumed to be internal only.
+
+**What changed.**
+- All secrets held by the process are redacted by value wherever they appear,
+  before persisting to any file.
+- Redaction by value (whatever the process knows is a secret) rather than by
+  pattern shape, because a pattern-based rule only catches formats someone
+  anticipated.
+
+> **Rule: redact by value, before persisting.** An error string that quotes a
+> keyed URL will expose the key. Redact everything the process knows is a secret,
+> not patterns you think might be secret.
+
+---
+
+## 7. A label asserted something the data did not support
+
+**What happened.** A report row labelled "Real GDP" was fed by an alias resolving
+to FRED's `GDP` series, which is nominal; real GDP is `GDPC1`. Every report printed
+nominal GDP under a real-GDP heading for weeks.
+
+Separately, an audit proposed "fixing" spread rows from percentage points to percent
+for "consistency". That would have misstated 275 basis points as 2.75%. A spread is
+a difference between two rates, so percentage points is correct — the proposed fix
+was wrong.
+
+**Why it happened.** A friendly alias was not verified against what it actually
+resolved to. A plausible-sounding consistency fix was not checked against the domain
+meaning of the data.
+
+**What changed.**
+- Every alias is resolved and checked against its actual FRED identifier before
+  data is served.
+- "Consistency fixes" on data require domain verification before they are applied.
+
+> **Rule: a label is a claim about the data.** It needs verifying like any other
+> fact. The identifier an alias resolves to, the units a series carries, and the
+> meaning of a "fix" all belong in verification, not convenience.
+
+---
+
 ## The through-line
 
-All three were the same shape: **a number that looked authoritative but wasn't**,
-surviving because nothing checked it against an independent path.
+All seven incidents were the same shape: **a number or artifact that looked
+authoritative but wasn't**, surviving because nothing checked it against an
+independent path.
 
-The funding rate came from a real API and was 38× wrong. The credit percentile was
-arithmetically correct and economically misleading. The token bill came from code
-that worked exactly as written.
+The funding rate came from a real API and was 38× wrong. A cached error replayed
+as real data. An API key leaked into audit logs. Test isolation was optional. A
+label meant one thing and the data was another. Each was invisible until it
+corrupted a downstream decision.
 
-What catches these is not more caution — it is deriving the answer a second way and
-comparing. Every fix here has that shape: OI-weighting checked against the observed
-basis, MVRV cross-checked between two providers, percentiles carrying the window
-they were measured over, tables computed in tested code rather than re-derived
-from scratch each run.
+What catches these is not more caution — it is separating concerns so failures are
+loud and localized. Every fix here has that shape: errors fail fast and are never
+cached, isolation is mandatory not optional, secrets are redacted before storage,
+labels are verified against their data, scores are computed from tested code, and
+backups cover everything at risk.

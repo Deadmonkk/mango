@@ -20,6 +20,7 @@ import asyncio
 
 import httpx
 
+from terminalq.mango.env import load_env
 from terminalq.mango import cache
 from terminalq.mango.limiter import RateLimiter
 from terminalq.mango.logging import get_logger
@@ -36,6 +37,10 @@ BASE_URL = "https://api.stlouisfed.org/fred"
 # Read once at import time; tests monkeypatch this module attribute directly
 # rather than the environment, mirroring the pattern already used for this
 # constant elsewhere in the codebase (see tests/test_release_calendar.py).
+# Load ~/.env before resolving the key. Without this the key is found only when
+# some other module happened to load the dotfile first — which is import-order
+# luck inside a host project, and simply broken standalone.
+load_env()
 FRED_API_KEY: str = os.environ.get("FRED_API_KEY", "")
 
 # FRED's documented rate limit is 120 requests/minute per API key.
