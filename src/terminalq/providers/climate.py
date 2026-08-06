@@ -40,9 +40,9 @@ import asyncio
 import datetime as dt
 
 import httpx
-from terminalq.logging_config import log
+from terminalq.mango.logging import log
 
-from terminalq import cache
+from terminalq.mango import cache
 from terminalq.analytics import backtest_utils
 from terminalq.ext_settings import (
     CACHE_TTL_CLIMATE,

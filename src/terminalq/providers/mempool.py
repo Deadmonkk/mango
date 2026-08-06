@@ -8,9 +8,9 @@ demand is spiking (bull-market congestion or an inscription/ordinals wave).
 import math
 
 import httpx
-from terminalq.logging_config import log
+from terminalq.mango.logging import log
 
-from terminalq import cache
+from terminalq.mango import cache
 from terminalq.ext_settings import (
     CACHE_TTL_MEMPOOL,
     MEMPOOL_FEE_CONGESTED_SAT_VB,

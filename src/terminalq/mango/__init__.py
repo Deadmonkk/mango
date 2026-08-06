@@ -1,0 +1,1 @@
+"""Mango extension namespace package."""

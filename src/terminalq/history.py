@@ -14,7 +14,7 @@ import json
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from terminalq.logging_config import log
+from terminalq.mango.logging import log
 
 from terminalq.ext_settings import PORTFOLIO_DIR
 

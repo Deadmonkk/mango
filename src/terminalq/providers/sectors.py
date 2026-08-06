@@ -8,9 +8,9 @@ even when the index looks calm; cyclicals leading = risk-on confirmed.
 import asyncio
 import statistics
 
-from terminalq.logging_config import log
+from terminalq.mango.logging import log
 
-from terminalq import cache
+from terminalq.mango import cache
 from terminalq._lazy_yfinance import yfinance
 from terminalq.ext_settings import CACHE_TTL_SECTORS
 

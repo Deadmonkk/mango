@@ -13,7 +13,7 @@ on your bracket, state, other income, and withholding — confirm with a CPA.
 from datetime import date, datetime
 
 from terminalq.ext_settings import RSU_DEFAULT_LTCG_RATE, RSU_DEFAULT_MARGINAL_RATE
-from terminalq.logging_config import log
+from terminalq.mango.logging import log
 from terminalq.providers.portfolio import load_rsu_schedule
 
 

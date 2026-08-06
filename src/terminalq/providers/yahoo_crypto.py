@@ -17,7 +17,7 @@ so callers can branch instead of handling exceptions.
 
 import asyncio
 
-from terminalq.logging_config import log
+from terminalq.mango.logging import log
 
 from terminalq._lazy_yfinance import yfinance
 

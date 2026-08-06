@@ -11,7 +11,7 @@ pretending a handful of points is signal.
 
 from datetime import date, datetime, timedelta
 
-from terminalq.logging_config import log
+from terminalq.mango.logging import log
 
 from terminalq.history import latest_snapshot_per_day
 from terminalq.providers import historical

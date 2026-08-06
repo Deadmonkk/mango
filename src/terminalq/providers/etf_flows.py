@@ -7,9 +7,9 @@ GBTC, ...) are the most direct gauge of institutional demand for Bitcoin.
 import re
 
 import httpx
-from terminalq.logging_config import log
+from terminalq.mango.logging import log
 
-from terminalq import cache
+from terminalq.mango import cache
 from terminalq.ext_settings import CACHE_TTL_ETF_FLOWS, ETF_FLOWS_DEFAULT_DAYS
 from terminalq.providers import _html
 

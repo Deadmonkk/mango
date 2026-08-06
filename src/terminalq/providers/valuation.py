@@ -11,9 +11,9 @@ import asyncio
 import re
 
 import httpx
-from terminalq.logging_config import log
+from terminalq.mango.logging import log
 
-from terminalq import cache
+from terminalq.mango import cache
 from terminalq.analytics import percentiles
 from terminalq.ext_settings import CACHE_TTL_VALUATION, ERP_THIN_CUSHION_PP
 from terminalq.providers import _html, fred
