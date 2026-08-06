@@ -14,7 +14,7 @@ from datetime import date, datetime
 
 from terminalq.ext_settings import RSU_DEFAULT_LTCG_RATE, RSU_DEFAULT_MARGINAL_RATE
 from terminalq.mango.logging import log
-from terminalq.providers.portfolio import load_rsu_schedule
+from terminalq.mango.portfolio import load_rsu_schedule
 
 
 def _parse_dollars(text: str) -> float | None:
