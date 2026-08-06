@@ -64,6 +64,34 @@ index 8f7d3c5..6fedd8c 100644
  | All data sources fail | Multiple critical tools return errors | Abort and inform user that insufficient data is available for a decision |
  
  ## When Not to Use
+diff --git a/src/terminalq/cache.py b/src/terminalq/cache.py
+index 7b7cb6d..bdfa3f0 100644
+--- a/src/terminalq/cache.py
++++ b/src/terminalq/cache.py
+@@ -4,6 +4,7 @@ import json
+ import time
+ from pathlib import Path
+ 
++from terminalq.cache_guard import should_cache
+ from terminalq.config import CACHE_DIR
+ from terminalq.logging_config import log
+ 
+@@ -34,7 +35,14 @@ def get(key: str) -> dict | list | None:
+ 
+ 
+ def set(key: str, value, ttl: int = 60) -> None:
+-    """Cache a value with a TTL in seconds."""
++    """Cache a value with a TTL in seconds.
++
++    Payloads carrying a provider error are never stored — caching a failure
++    turns a momentary outage into a full TTL window of silent data loss.
++    """
++    if not should_cache(value):
++        log.warning("Refusing to cache error payload: %s", key)
++        return
+     try:
+         CACHE_DIR.mkdir(parents=True, exist_ok=True)
+         data = {
 diff --git a/src/terminalq/providers/coingecko.py b/src/terminalq/providers/coingecko.py
 index a850c40..d3f82a7 100644
 --- a/src/terminalq/providers/coingecko.py

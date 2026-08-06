@@ -136,6 +136,23 @@ class TestEquityComponents:
         for c in equity_components({}, {}):
             assert c.score is None
 
+    def test_credit_needs_both_index_and_tail(self) -> None:
+        # HY alone cannot verify the low-quality tail is calm. When the CCC-BB
+        # gap is missing the component must drop out, not score near-max —
+        # otherwise a source outage renders as maximally bullish credit.
+        raw = {"mc_hy_spread": {"percentile_since_start": 4.4}}
+        credit = next(c for c in equity_components(raw, {}) if c.name == "Credit stress & quality")
+        assert credit.score is None
+
+    def test_credit_scores_when_both_legs_present(self) -> None:
+        raw = {"mc_hy_spread": {"percentile_since_start": 4.4}}
+        credit = next(
+            c for c in equity_components(raw, {"ccc_minus_bb_pp": 8.6})
+            if c.name == "Credit stress & quality"
+        )
+        # Tight index (95.6 raw) docked for a stressed tail — must land well below it.
+        assert credit.score is not None and credit.score < 80
+
 
 def test_clamp_bounds() -> None:
     assert clamp(-5) == 0.0
