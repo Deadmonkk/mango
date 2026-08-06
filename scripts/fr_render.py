@@ -428,3 +428,111 @@ def render_anomalies(raw: dict) -> str:
             "These are flagged for interpretation, NOT filtered: each number below is real "
             "and appears in the tables above. Address the bolded ones in the report.\n\n"
             + "\n".join(f"- {f}" for f in flags))
+
+
+# ---------------------------------------------------------------------------
+# Climate region table — the climate provider returns a dict of variable-keyed
+# regions (12 named production regions), a shape the flat Field/Section model
+# above cannot express. This renders it as its own fixed-column markdown table.
+# ---------------------------------------------------------------------------
+REGION_EXPOSURE_CAP = 4          # tickers shown per region before truncating to "…"
+REGION_STATUS_MAX_CHARS = 60     # provider's own signal string, truncated
+REGION_TEMP_DECIMALS = 2
+REGION_PRECIP_DECIMALS = 1
+# Fixed iteration order over `watch` sub-keys so the exposure list is
+# deterministic regardless of the input dict's own key order.
+WATCH_CATEGORY_ORDER = ("commodities", "upstream", "midstream", "downstream", "other_assets")
+NO_EXPOSURE_LINKED = "none linked"
+
+
+def _fmt_signed(v: float, decimals: int, unit: str) -> str:
+    """Signed numeric string with trailing zeros trimmed to one minimum decimal.
+
+    round(-3.0, 2) must render "-3.0°C", not "-3.00°C"; round(1.76, 2) must keep
+    both digits: "+1.76°C". `fmt_value` above targets an unsigned/thousands style
+    that doesn't fit an anomaly reading, so this is a small sibling, not a reuse.
+    """
+    r = round(float(v), decimals)
+    s = f"{r:.{decimals}f}"
+    if "." in s:
+        s = s.rstrip("0")
+        if s.endswith("."):
+            s += "0"
+    sign = "+" if r >= 0 else ""  # negative numbers already carry "-" from `s`
+    return f"{sign}{s}{unit}"
+
+
+def _region_exposure(watch: Any) -> str:
+    """Flatten `watch`'s ticker lists into a compact, capped, comma-joined string."""
+    if not isinstance(watch, dict):
+        return NO_EXPOSURE_LINKED
+    tickers: list[str] = []
+    for category in WATCH_CATEGORY_ORDER:
+        entries = watch.get(category)
+        if isinstance(entries, list):
+            tickers.extend(str(e) for e in entries if e)
+    if not tickers:
+        return NO_EXPOSURE_LINKED
+    shown = tickers[:REGION_EXPOSURE_CAP]
+    suffix = "…" if len(tickers) > REGION_EXPOSURE_CAP else ""
+    return ", ".join(shown) + suffix
+
+
+def _region_row(region: dict) -> str:
+    label = region.get("label") or "—"
+
+    temp = region.get("temp_anomaly_c")
+    temp_str = _fmt_signed(temp, REGION_TEMP_DECIMALS, "°C") if is_num(temp) else FAIL
+
+    precip = region.get("precip_anomaly_pct")
+    precip_str = _fmt_signed(precip, REGION_PRECIP_DECIMALS, "%") if is_num(precip) else FAIL
+
+    signal = region.get("signal")
+    status = str(signal).strip()[:REGION_STATUS_MAX_CHARS] if signal else FAIL
+
+    exposure = _region_exposure(region.get("watch"))
+
+    return f"| {label} | {temp_str} | {precip_str} | {status} | {exposure} |"
+
+
+def render_region_table(climate: dict) -> str:
+    """Finished markdown table for the climate provider's per-region payload.
+
+    Flagged regions (per `flagged_regions`) sort first; order is otherwise the
+    stable insertion order of `regions`, so identical input always renders an
+    identical table.
+    """
+    if not isinstance(climate, dict) or climate.get("error"):
+        return f"Climate risk watch: {FAIL}"
+    regions = climate.get("regions")
+    if not isinstance(regions, dict) or not regions:
+        return f"Climate risk watch: {FAIL}"
+
+    # `flagged_regions` holds each region's LABEL, not its dict key (verified
+    # against the live payload), so it cannot be matched against `regions.keys()`
+    # directly. Prefer each region's own `signal` string — it lives inside the
+    # record and can't drift out of sync with a separate list — and accept a
+    # label match against `flagged_regions` as a second, independent path so
+    # either source is sufficient.
+    flagged_labels = set(climate.get("flagged_regions") or [])
+    keys_in_order = list(regions.keys())
+
+    def _is_flagged(key: str) -> bool:
+        region = regions.get(key) or {}
+        signal = str(region.get("signal") or "")
+        if signal.startswith("FLAGGED"):
+            return True
+        return region.get("label") in flagged_labels
+
+    ordered_keys = sorted(
+        keys_in_order,
+        key=lambda k: (0 if _is_flagged(k) else 1, keys_in_order.index(k)),
+    )
+
+    rows = ["| Region | Temp anomaly | Precip anomaly | Status | Linked exposure |",
+            "|---|---|---|---|---|"]
+    for key in ordered_keys:
+        region = regions.get(key)
+        if isinstance(region, dict):
+            rows.append(_region_row(region))
+    return "\n".join(rows)
