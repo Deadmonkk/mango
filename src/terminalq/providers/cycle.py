@@ -18,7 +18,7 @@ from terminalq.ext_settings import (
     CLAIMS_LOOKBACK_WEEKS,
     SAHM_TRIGGER_PP,
 )
-from terminalq.providers import fred
+from terminalq.mango import fred
 
 _CLAIMS_AVG_WEEKS = 4  # standard 4-week moving average for jobless claims
 _CLAIMS_PRIOR_OFFSET = 13  # compare against the 4-week average ~3 months earlier

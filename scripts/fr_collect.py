@@ -61,6 +61,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from fr_sections import render_digest  # noqa: E402
 
 from terminalq.mango.redact import redact  # noqa: E402
+from terminalq.mango import fred as mango_fred  # noqa: E402
 
 from terminalq.analytics import (  # noqa: E402
     correlation,
@@ -202,7 +203,7 @@ TOOL_MAP_FR: dict = {
     "btc_mempool": (a(mempool.get_btc_mempool), (), {}),
     "crypto_batch": (a(coingecko.get_crypto_batch), (["BTC", "ETH", "SOL", "XRP", "AVAX", "DOGE", "BNB"],), {}),
     # --- Macro, rates, cycle & liquidity (12) ---
-    "macro_dashboard": (a(fred.get_economic_dashboard), (), {}),
+    "macro_dashboard": (a(mango_fred.get_economic_dashboard), (), {}),
     "cpi_components": (a(fred_ext.get_cpi_components_dashboard), (), {}),
     "jolts": (a(fred_ext.get_jolts_dashboard), (), {}),
     "credit_spreads": (a(fred_ext.get_credit_spreads_dashboard), (), {}),

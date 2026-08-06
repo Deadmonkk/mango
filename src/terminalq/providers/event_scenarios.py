@@ -11,7 +11,7 @@ instead of reasoning in a vacuum.
 from terminalq.mango.logging import log
 
 from terminalq.history import latest_snapshot_per_day
-from terminalq.providers import fred
+from terminalq.providers import fred_ext as fred  # owns get_release_calendar
 
 # Which current snapshot reading anchors each event type's "prior".
 _EVENT_ANCHORS = {

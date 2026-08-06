@@ -20,7 +20,7 @@ from terminalq.mango import cache
 from terminalq.analytics import fred_archive
 from terminalq.ext_settings import CACHE_TTL_ECONOMIC, FRED_API_KEY
 from terminalq.mango.logging import log
-from terminalq.providers.fred import BASE_URL, SERIES_MAP, _resolve_series_id, get_series
+from terminalq.mango.fred import BASE_URL, SERIES_MAP, _resolve_series_id, get_series
 
 # Aliases this pack adds. Merged into upstream's SERIES_MAP on import so
 # `get_series("hy_spread")` resolves without upstream having to know about them.
@@ -68,6 +68,32 @@ EXTRA_SERIES = {
 }
 
 SERIES_MAP.update(EXTRA_SERIES)
+
+
+def _register_aliases_with_host() -> None:
+    """Also register these aliases with the host project's series map, if present.
+
+    TRANSITIONAL — remove once the host's own FRED client is gone (Phase 5).
+
+    Before this pack owned its FRED client, updating the shared map was what let
+    the host's `get_series` resolve aliases like "hy_spread" too, which its MCP
+    tools rely on. Now that registration lands on the owned map, the host would
+    silently pass "hy_spread" through as a literal series ID and query FRED for
+    something that does not exist.
+
+    The import is deliberately optional: this pack must stay importable with no
+    host present, so a missing host is a normal outcome, not an error.
+    """
+    try:
+        from terminalq.providers import fred as _host_fred
+    except ImportError:
+        return
+    host_map = getattr(_host_fred, "SERIES_MAP", None)
+    if isinstance(host_map, dict):
+        host_map.update(EXTRA_SERIES)
+
+
+_register_aliases_with_host()
 
 
 # ORIGIN NOTE
