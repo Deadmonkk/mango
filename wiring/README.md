@@ -11,6 +11,18 @@ and those edits live in files this pack does not ship.
 directory, untracked. On 2026-08-05 a `git checkout --` on one of those files
 destroyed 659 lines of work that no backup held. This patch is the record.
 
+It has since paid for itself. On **2026-08-06** a `git stash` + `reset` in the
+host checkout reverted all 17 modified upstream files at once; applying this
+patch restored every one of them. Two lessons were folded back in:
+
+- **Never run git commands in the host checkout.** It is someone else's
+  repository carrying thousands of lines of uncommitted local work. `checkout`,
+  `reset`, `stash` and `clean` are all irreversible there.
+- **The path filter now includes root files.** The 2026-08-05 filter covered
+  only `src/ tests/ docs/ skills/ commands/`, so `pyproject.toml` and
+  `CLAUDE.md` silently fell outside the backup and had to be recovered from a
+  stash that happened to still exist. Both are now captured.
+
 ## Applying
 
 ```bash
@@ -30,9 +42,12 @@ the suite passes either way — it simply reports fewer integration tests withou
 From a wired checkout:
 
 ```bash
-git diff -- src/ tests/ docs/ skills/ commands/ ':(exclude)uv.lock' \
-  > /path/to/Mango/wiring/upstream-wiring.patch
+git diff -- src/ tests/ docs/ skills/ commands/ pyproject.toml CLAUDE.md \
+  ':(exclude)uv.lock' > /path/to/Mango/wiring/upstream-wiring.patch
 ```
+
+Keep `pyproject.toml` and `CLAUDE.md` in that list — they are root files and an
+earlier version of this command silently excluded them.
 
 `CLAUDE.md.reference` is a copy of the report playbooks (FR/EOD/specialist agents)
 that drive this toolkit. Kept here as documentation and as a backup; it is not

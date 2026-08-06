@@ -68,6 +68,7 @@ from terminalq.analytics import (  # noqa: E402
 )
 from terminalq.providers import (  # noqa: E402
     cftc,
+    climate,
     coingecko,
     crypto_analytics,
     crypto_funding,
@@ -81,6 +82,7 @@ from terminalq.providers import (  # noqa: E402
     fred_ext,
     market_data,
     mempool,
+    options_flow,
     retail_sentiment,
     search,
     sectors,
@@ -144,11 +146,15 @@ def dig(obj, path, default=FAIL):
 #   EY-gap (11): metric_context(THREEFYTP10, PSAVERT, LES1252881600Q, REVOLSL,
 #     BAMLH0A3HYC, BAMLH0A1HYBB, B235RC1Q027SBEA, IMPGS, LNS11300060, OPHNFB),
 #     web_search(GSCPI)  [LABEL EXTERNAL in brief]
-#   equities/cross-asset (15): market_overview, equity_sentiment,
-#     retail_sentiment, market_valuation, technicals(SPY), sector_rotation,
-#     style_box, asset_class_returns, correlation_matrix, international_markets,
-#     economic_calendar, cot_report(sp500), cot_report(gold),
-#     13f_holdings(berkshire), insider_transactions(NVDA)
+#   equities/cross-asset (17): market_overview, equity_sentiment,
+#     retail_sentiment, market_valuation, technicals(SPY), dealer_gamma(SPY),
+#     climate_risk, sector_rotation, style_box, asset_class_returns,
+#     correlation_matrix, international_markets, economic_calendar,
+#     cot_report(sp500), cot_report(gold), 13f_holdings(berkshire),
+#     insider_transactions(NVDA)
+#     [dealer_gamma + climate_risk added 2026-08-06: both are required by the
+#      FR playbook (§6 gamma/VIX pairing, §7 ESG watch) but were never in this
+#      map, so those sections rendered empty every run.]
 #   self-learning (2, read-only): grade_predictions, get_regime_history(30)
 #   For EOD mode: market_overview, equity_sentiment, technicals(SPY)[ATR],
 #     sector_rotation, quotes_batch(11 SPDRs), quotes_batch(research
@@ -219,6 +225,8 @@ TOOL_MAP_FR: dict = {
     "retail_sentiment": (a(retail_sentiment.get_retail_sentiment), (), {}),
     "market_valuation": (a(valuation.get_market_valuation), (), {}),
     "technicals_SPY": (a(technical.get_full_technicals), ("SPY",), {}),
+    "dealer_gamma_SPY": (a(options_flow.get_dealer_gamma), ("SPY",), {}),  # §6 pairs with VIX
+    "climate_risk": (a(climate.get_climate_risk_watch), (), {}),  # §7 ESG/production risk
     "sector_rotation": (a(sectors.get_sector_rotation), (), {}),
     "style_box": (a(market_data.get_style_box), (), {}),
     "asset_class_returns": (a(market_data.get_asset_class_returns), (), {}),

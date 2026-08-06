@@ -19,6 +19,17 @@ from fr_render import (
     render_table,
 )
 
+# TEMPORARY GUARD: render_region_table(climate: dict) -> str is landing concurrently
+# in fr_render.py (owned by another agent working in parallel). The signature is
+# pinned, so we code against it now; if it hasn't landed yet, fall back to the FAIL
+# sentinel rather than let the whole digest fail to import. Remove this try/except
+# once fr_render.render_region_table is confirmed present.
+try:
+    from fr_render import render_region_table
+except ImportError:
+    def render_region_table(climate: dict) -> str:  # type: ignore[misc]
+        return FAIL
+
 PCT = "%"
 USD = ""
 PP = "pp"
@@ -97,8 +108,14 @@ SECTIONS: tuple[Section, ...] = (
         Field("SPY vs 200d SMA", "technicals_SPY", "sma.sma_200", read_path="overall_signal"),
         Field("SPY MACD", "technicals_SPY", "macd.histogram", read_path="macd.signal"),
         Field("SPY ATR(14)", "technicals_SPY", "atr.atr"),
+        Field("Net dealer gamma (SPY)", "dealer_gamma_SPY", "net_dealer_gamma",
+              read_path="signal"),
+        Field("Net gamma regime", "dealer_gamma_SPY", "net_gamma_regime"),
+        Field("Call wall (SPY)", "dealer_gamma_SPY", "call_wall"),
+        Field("Put wall (SPY)", "dealer_gamma_SPY", "put_wall"),
+        Field("Put/call OI ratio (SPY)", "dealer_gamma_SPY", "put_call_oi_ratio"),
     )),
-    Section("7", "Commodities & Dollar", (
+    Section("7", "Commodities, Dollar & Climate Risk", (
         Field("WTI crude", "commodities", "indicators.wti_oil.latest_value"),
         Field("Gold", "commodities", "indicators.gold_price.latest_value"),
         Field("Gasoline", "commodities", "indicators.gasoline_price.latest_value"),
@@ -236,6 +253,13 @@ def render_digest(raw: dict, derived: dict, date: str, mode: str = "fr") -> str:
     is_fr = mode == "fr"
     for sec in (SECTIONS if is_fr else EOD_SECTIONS):
         out += [f"## {sec.number}. {sec.title}", "", render_table(src, sec), ""]
+        if is_fr and sec.number == "7":
+            out += [
+                "### ESG & Climate Production-Risk Watch",
+                "",
+                render_region_table(raw.get("climate_risk", {})),
+                "",
+            ]
 
     # Regime scores are an FR construct. EOD does not gather the valuation,
     # sentiment or on-chain sources they need, so computing them there would
