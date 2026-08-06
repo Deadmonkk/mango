@@ -60,6 +60,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from fr_sections import render_digest  # noqa: E402
 
+from terminalq.mango.redact import redact  # noqa: E402
+
 from terminalq.analytics import (  # noqa: E402
     correlation,
     correlation_regime,
@@ -332,7 +334,11 @@ def main() -> int:
         print("TOOL_MAP is empty — complete the wiring per the header/build spec first.", file=sys.stderr)
         return 2
 
-    raw = {label: safe(fn, *a, **kw) for label, (fn, a, kw) in tool_map.items()}
+    collected = {label: safe(fn, *a, **kw) for label, (fn, a, kw) in tool_map.items()}
+    # Provider errors quote the failing URL, which for a keyed API carries the
+    # key. These files persist in a user-facing folder, so scrub before any of
+    # them is written — not at render time, when the raw dump has already landed.
+    raw = redact(collected)
     derived = derive(raw)
     BRIEF_DIR.mkdir(parents=True, exist_ok=True)
     (BRIEF_DIR / f"{args.mode}_raw_{date}.json").write_text(json.dumps(raw, indent=2, default=str))
