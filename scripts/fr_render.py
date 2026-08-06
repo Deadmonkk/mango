@@ -436,6 +436,12 @@ def render_anomalies(raw: dict) -> str:
 # above cannot express. This renders it as its own fixed-column markdown table.
 # ---------------------------------------------------------------------------
 REGION_EXPOSURE_CAP = 4          # tickers shown per region before truncating to "…"
+# Providers annotate tickers with prose ("XOM (ExxonMobil — largest Permian
+# producer after its 2024 Pioneer acquisition)"). The symbol is the payload; the
+# prose is not, and 12 regions of it cost ~250 tokens of a ~2.6k digest. Cap each
+# entry so short forms like "corn (ZC)" survive intact and long ones lose only
+# the description.
+REGION_EXPOSURE_ENTRY_MAX_CHARS = 24
 REGION_STATUS_MAX_CHARS = 60     # provider's own signal string, truncated
 REGION_TEMP_DECIMALS = 2
 REGION_PRECIP_DECIMALS = 1
@@ -473,9 +479,27 @@ def _region_exposure(watch: Any) -> str:
             tickers.extend(str(e) for e in entries if e)
     if not tickers:
         return NO_EXPOSURE_LINKED
-    shown = tickers[:REGION_EXPOSURE_CAP]
-    suffix = "…" if len(tickers) > REGION_EXPOSURE_CAP else ""
-    return ", ".join(shown) + suffix
+    shown = [_trim_entry(t) for t in tickers[:REGION_EXPOSURE_CAP]]
+    joined = ", ".join(shown)
+    # Only mark "more follow" when the last entry did not already end in an
+    # ellipsis of its own — otherwise the two collide as "Corteva……".
+    if len(tickers) > REGION_EXPOSURE_CAP and not joined.endswith("…"):
+        joined += "…"
+    return joined
+
+
+def _trim_entry(entry: str) -> str:
+    """Drop a ticker's trailing prose once it exceeds the per-entry budget.
+
+    Trims on a word boundary where one exists inside the budget, so the result
+    reads as a truncated name rather than a severed word.
+    """
+    entry = entry.strip()
+    if len(entry) <= REGION_EXPOSURE_ENTRY_MAX_CHARS:
+        return entry
+    cut = entry[:REGION_EXPOSURE_ENTRY_MAX_CHARS]
+    spaced = cut.rsplit(" ", 1)[0] if " " in cut else cut
+    return spaced.rstrip(" ,—-(") + "…"
 
 
 def _region_row(region: dict) -> str:

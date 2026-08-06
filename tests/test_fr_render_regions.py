@@ -50,7 +50,9 @@ class TestNormalRender:
         table = render_region_table(climate)
 
         assert "| US Corn Belt (Iowa) | +1.76°C | -43.8% |" in table
-        assert "corn (ZC), soybeans (ZS), DE (Deere — equipment), ADM (Archer-Daniels-Midland)…" in table
+        # Entries within the per-entry budget survive whole; "ADM (Archer-Daniels-Midland)"
+        # exceeds it and keeps only its symbol. See TestExposureEntryTrimming.
+        assert "corn (ZC), soybeans (ZS), DE (Deere — equipment), ADM…" in table
 
 
 class TestFlaggedSortsFirst:
@@ -156,6 +158,49 @@ class TestExposureCapping:
 
         assert "A, B" in table
         assert "A, B…" not in table
+
+
+class TestExposureEntryTrimming:
+    """Providers annotate tickers with prose; the digest only needs the symbol."""
+
+    def test_short_entry_survives_intact(self) -> None:
+        region = _region(watch={"commodities": ["corn (ZC)"]})
+
+        table = render_region_table({"regions": {"r": region}, "flagged_regions": []})
+
+        assert "corn (ZC)" in table
+        assert "corn (ZC)…" not in table
+
+    def test_long_entry_is_trimmed_with_ellipsis(self) -> None:
+        long_entry = "XOM (ExxonMobil — largest Permian producer after its 2024 acquisition)"
+        region = _region(watch={"commodities": [long_entry]})
+
+        table = render_region_table({"regions": {"r": region}, "flagged_regions": []})
+
+        assert long_entry not in table
+        assert "XOM (ExxonMobil" in table  # the symbol, which is the payload, survives
+        assert "…" in table
+
+    def test_trim_does_not_sever_a_word_midway(self) -> None:
+        region = _region(watch={"commodities": ["ADM (ArcherDanielsMidlandCompany) extra"]})
+
+        table = render_region_table({"regions": {"r": region}, "flagged_regions": []})
+
+        exposure = table.splitlines()[2].split("|")[5]
+        assert "  " not in exposure.strip()
+        assert exposure.strip().endswith("…")
+
+    def test_trimmed_last_entry_does_not_double_the_ellipsis(self) -> None:
+        # A trimmed 4th entry ends in "…"; the "more follow" marker must not
+        # append a second one, which would render as "Corteva……".
+        long_entry = "CTVA (Corteva — seed and crop inputs supplier)"
+        region = _region(
+            watch={"commodities": ["A", "B", "C", long_entry], "other_assets": ["E"]}
+        )
+
+        table = render_region_table({"regions": {"r": region}, "flagged_regions": []})
+
+        assert "……" not in table
 
 
 class TestFailedOrEmptyInput:
