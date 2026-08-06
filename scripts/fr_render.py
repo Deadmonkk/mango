@@ -173,12 +173,14 @@ def equity_components(raw: dict, derived: dict) -> list[Component]:
     hy_pct = dig(raw.get("mc_hy_spread", {}), "percentile_since_start")
     gap = derived.get("ccc_minus_bb_pp")
     credit: float | None = None
-    if is_num(hy_pct):
-        # A tight index spread is bottom-like ONLY if the low-quality tail is calm too.
+    # A tight index spread is bottom-like ONLY if the low-quality tail is calm
+    # too, so BOTH legs are required. With the gap missing we cannot verify the
+    # tail, and scoring on the index alone would render an outage as the most
+    # bullish possible credit reading — drop the component and renormalise.
+    if is_num(hy_pct) and is_num(gap):
         credit = clamp(PCT_MAX - float(hy_pct))
-        if is_num(gap):
-            credit -= lerp_score(float(gap), CCC_BB_CALM_PP, CCC_BB_STRESS_PP) * 0.5
-            credit = clamp(credit)
+        credit -= lerp_score(float(gap), CCC_BB_CALM_PP, CCC_BB_STRESS_PP) * 0.5
+        credit = clamp(credit)
     out.append(Component("Credit stress & quality", 0.20, credit,
                          f"HY {hy_pct}th pct, CCC−BB {gap}pp"))
 
