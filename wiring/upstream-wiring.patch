@@ -198,10 +198,10 @@ index e69b7b1..33c5669 100644
  
  ## Market Briefing
 diff --git a/pyproject.toml b/pyproject.toml
-index 5475353..2996970 100644
+index 5475353..31219ae 100644
 --- a/pyproject.toml
 +++ b/pyproject.toml
-@@ -1,7 +1,7 @@
+@@ -1,22 +1,18 @@
  [project]
  name = "terminalq"
  version = "0.5.0"
@@ -209,8 +209,12 @@ index 5475353..2996970 100644
 +description = "Bloomberg-style financial terminal — 81 MCP tools, 6 workflow skills, audit trails"
  requires-python = ">=3.11"
  dependencies = [
-     "mcp[cli]>=1.0.0",
-@@ -10,13 +10,7 @@ dependencies = [
+-    "mcp[cli]>=1.0.0",
++    # Upper bound is load-bearing: mcp 2.x moved mcp.server.fastmcp, which
++    # server.py imports. An unpinned resolve took 2.0.0 and broke server start.
++    "mcp[cli]>=1.0.0,<2",
+     "httpx>=0.27.0",
+     "python-dotenv>=1.0.0",
      "yfinance>=0.2.0",
      "asciichartpy>=1.5.0",
      "plotext>=5.2.0",
@@ -225,7 +229,7 @@ index 5475353..2996970 100644
  ]
  
  [build-system]
-@@ -37,3 +31,10 @@ ignore = ["E501"]
+@@ -37,3 +33,10 @@ ignore = ["E501"]
  
  [tool.ruff.lint.isort]
  known-first-party = ["terminalq"]
