@@ -351,8 +351,10 @@ contributor's pull request: valuable, and not the source of truth.
 *coordinator's* own scripts were also wrong in the same session — one reported
 zero duplicate files when 37 existed, one missed an entire directory, one
 rewrote `as`-aliased imports into invalid syntax. The failure mode is not
-"subagents are unreliable." The checking is where the risk sits, whoever wrote
-it.
+"subagents are unreliable", nor is it that checking is unreliable in general —
+the collector contract tests in the same session worked exactly as intended.
+What failed was narrower and more specific: **relying on checks that had not yet
+demonstrated they could detect the failures they were meant to catch.**
 
 But "distrust automation" is not actionable. The precise statement is that **a
 check is unverified until it has demonstrated it detects the failure it was
