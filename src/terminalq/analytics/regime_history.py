@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta
 from terminalq.mango.logging import log
 
 from terminalq.history import latest_snapshot_per_day
-from terminalq.providers import historical
+from terminalq.mango import historical
 
 # Band edges mirror the global FR scoring rubric.
 _BANDS = [
