@@ -351,8 +351,24 @@ contributor's pull request: valuable, and not the source of truth.
 *coordinator's* own scripts were also wrong in the same session — one reported
 zero duplicate files when 37 existed, one missed an entire directory, one
 rewrote `as`-aliased imports into invalid syntax. The failure mode is not
-"subagents are unreliable." It is that any automated check is itself unverified
-until something independent confirms it. The checking is where the risk sits.
+"subagents are unreliable." The checking is where the risk sits, whoever wrote
+it.
+
+But "distrust automation" is not actionable. The precise statement is that **a
+check is unverified until it has demonstrated it detects the failure it was
+written for** — which is a property you can establish, not a permanent
+condition. That gives a workflow:
+
+1. write the check
+2. inject the failure it is supposed to catch
+3. observe it fail
+4. revert, and now trust it
+
+The collector contract tests were built exactly this way: the real namespace
+regression was reintroduced, all twelve tests failed with the expected
+`ImportError`, and only then was the guard considered real. A regression test
+written after the fact that has never been shown to fail is an assumption
+wearing the costume of a guarantee.
 
 ## 9. Test a threshold before distrusting it
 

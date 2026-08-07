@@ -5,6 +5,24 @@ because those are the ones that make two reports incomparable.
 
 ## 2026-08-07
 
+### Report schema v2
+
+Reports now carry a schema version in their header. It is bumped only when a
+change alters what a figure *means* — not for code changes, bug fixes, or new
+sources. Two reports sharing a schema version are directly comparable; two with
+different versions are not, and the difference is explained here.
+
+| Schema | From | What changed |
+|---|---|---|
+| v1 | original | — |
+| v2 | 2026-08-07 | the GDP row reports real GDP (`GDPC1`), not nominal (`GDP`) |
+
+Added because today's GDP switch is the first such change and will not be the
+last. Without it, a reader comparing an archived report to a later one has to
+find and read this file to know whether a moved number reflects the economy or
+a definition.
+
+
 ### Changed — affects report figures
 
 - **The GDP row now reports REAL GDP instead of nominal.** The row was labelled

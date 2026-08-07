@@ -34,6 +34,13 @@ PCT = "%"
 USD = ""
 PP = "pp"
 
+# Bumped whenever a change alters what a figure MEANS, so an archived report can
+# be interpreted without reading the changelog. Not a code version — two reports
+# with the same schema are directly comparable; different schemas are not.
+#   v1  original
+#   v2  2026-08-07 — the GDP row reports real GDP (GDPC1), not nominal (GDP)
+REPORT_SCHEMA_VERSION = 2
+
 SECTIONS: tuple[Section, ...] = (
     Section("1", "Macro Snapshot", (
         Field("Real GDP", "macro_dashboard", "indicators.real_gdp.latest_value"),
@@ -239,6 +246,8 @@ def render_digest(raw: dict, derived: dict, date: str, mode: str = "fr") -> str:
     src = _resolve(raw, derived)
     out = [
         f"# {mode.upper()} DIGEST — {date}",
+        "",
+        f"*Report schema v{REPORT_SCHEMA_VERSION} — carry this into the saved report. Figures are only\ndirectly comparable with reports of the same schema; see CHANGELOG.md.*",
         "",
         "> Tables below are FINAL — built in Python from live provider results this run. "
         "Do NOT rebuild, re-order, or restate them. Every `Read` cell is either the provider's "
