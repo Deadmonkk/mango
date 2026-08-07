@@ -303,7 +303,7 @@ index 7b7cb6d..bdfa3f0 100644
          CACHE_DIR.mkdir(parents=True, exist_ok=True)
          data = {
 diff --git a/src/terminalq/providers/coingecko.py b/src/terminalq/providers/coingecko.py
-index a850c40..d3f82a7 100644
+index a850c40..b6eac3d 100644
 --- a/src/terminalq/providers/coingecko.py
 +++ b/src/terminalq/providers/coingecko.py
 @@ -1,10 +1,28 @@
@@ -333,7 +333,7 @@ index a850c40..d3f82a7 100644
 +    FEAR_GREED_EXTREME_GREED,
 +)
  from terminalq.logging_config import log
-+from terminalq.providers import hyperliquid, yahoo_crypto
++from mango.providers import hyperliquid, yahoo_crypto
  from terminalq.rate_limiter import RateLimiter
  
  BASE_URL = "https://api.coingecko.com/api/v3"
@@ -1379,18 +1379,19 @@ index 9b6cf4c..68a5ece 100644
 +    cache.set(cache_key, result, CACHE_TTL_FILINGS)
 +    return result
 diff --git a/src/terminalq/providers/finnhub.py b/src/terminalq/providers/finnhub.py
-index c26120e..b76b3ae 100644
+index c26120e..c811621 100644
 --- a/src/terminalq/providers/finnhub.py
 +++ b/src/terminalq/providers/finnhub.py
-@@ -16,6 +16,7 @@ from terminalq.config import (
+@@ -16,6 +16,8 @@ from terminalq.config import (
      FINNHUB_RATE_LIMIT,
  )
  from terminalq.logging_config import log
-+from terminalq.providers import fed_calendar, fred, fred_ext
++from mango.providers import fed_calendar, fred_ext
++from terminalq.providers import fred
  from terminalq.rate_limiter import RateLimiter
  
  BASE_URL = "https://finnhub.io/api/v1"
-@@ -344,6 +345,36 @@ async def get_economic_calendar(days: int = 7) -> dict:
+@@ -344,6 +346,36 @@ async def get_economic_calendar(days: int = 7) -> dict:
          )
  
      if isinstance(data, dict) and "_error" in data:
@@ -1635,59 +1636,62 @@ index 286413c..08bb518 100644
      cache.set(cache_key, result, CACHE_TTL_SEARCH)
      return result
 diff --git a/src/terminalq/server.py b/src/terminalq/server.py
-index a0c4b62..4631b84 100644
+index a0c4b62..0b304c5 100644
 --- a/src/terminalq/server.py
 +++ b/src/terminalq/server.py
-@@ -7,11 +7,45 @@ import time
- 
+@@ -8,10 +8,49 @@ import time
  from mcp.server.fastmcp import FastMCP
  
--from terminalq import audit, charts, usage_tracker
-+from terminalq import audit, charts, history, usage_tracker, voice
-+from terminalq.analytics import (
-+    allocation,
+ from terminalq import audit, charts, usage_tracker
++from mango import history, voice
++from mango.analytics import (
 +    correlation,
 +    correlation_regime,
 +    prediction_grader,
 +    regime_history,
++)
++from terminalq.analytics import (
++    allocation,
 +    risk,
 +)
  from terminalq.config import BRAVE_MONTHLY_LIMIT
 -from terminalq.analytics import allocation, risk
  from terminalq.logging_config import log
 -from terminalq.providers import coingecko, edgar, finnhub, fred, historical, portfolio, screener, search, technical
-+from terminalq.providers import (
++from mango.providers import (
 +    cftc,
 +    climate,
-+    coingecko,
 +    crypto_analytics,
 +    cycle,
 +    defillama,
-+    edgar,
 +    etf_flows,
 +    event_scenarios,
-+    finnhub,
-+    fred,
-+    historical,
 +    market_data,
 +    mempool,
 +    options_flow,
-+    portfolio,
 +    prediction_markets,
 +    reports,
 +    retail_sentiment,
 +    rsu_tax,
-+    screener,
-+    search,
 +    sectors,
 +    stress_backtest,
-+    technical,
 +    valuation,
++)
++from terminalq.providers import (
++    coingecko,
++    edgar,
++    finnhub,
++    fred,
++    historical,
++    portfolio,
++    screener,
++    search,
++    technical,
 +)
  
  mcp = FastMCP("TerminalQ")
  
-@@ -288,6 +322,36 @@ async def terminalq_get_filings(symbol: str, filing_type: str = "", limit: int =
+@@ -288,6 +327,36 @@ async def terminalq_get_filings(symbol: str, filing_type: str = "", limit: int =
      return json.dumps(result, indent=2)
  
  
@@ -1724,7 +1728,7 @@ index a0c4b62..4631b84 100644
  @mcp.tool()
  @audited
  async def terminalq_get_economic_indicator(indicator: str, limit: int = 12) -> str:
-@@ -639,6 +703,10 @@ async def terminalq_get_economic_calendar(days: int = 7) -> str:
+@@ -639,6 +708,10 @@ async def terminalq_get_economic_calendar(days: int = 7) -> str:
  async def terminalq_web_search(query: str, count: int = 5) -> str:
      """Search the web for financial news, company info, or market analysis.
  
@@ -1735,7 +1739,7 @@ index a0c4b62..4631b84 100644
      Args:
          query: Search query (e.g., "AAPL Q4 earnings", "Fed rate decision March 2026")
          count: Number of results to return (default 5, max 20)
-@@ -718,6 +786,791 @@ async def terminalq_get_usage_stats() -> str:
+@@ -718,6 +791,791 @@ async def terminalq_get_usage_stats() -> str:
      return json.dumps(result, indent=2, default=str)
  
  
@@ -2527,14 +2531,37 @@ index a0c4b62..4631b84 100644
  def main():
      """Run the TerminalQ MCP server."""
      log.info("Starting TerminalQ MCP server")
+diff --git a/tests/__init__.py b/tests/__init__.py
+index e69de29..3258997 100644
+--- a/tests/__init__.py
++++ b/tests/__init__.py
+@@ -0,0 +1 @@
++"""Test package. Mirrors the host layout so relative imports resolve."""
 diff --git a/tests/conftest.py b/tests/conftest.py
-index 249f268..af1047b 100644
+index 249f268..7e24f82 100644
 --- a/tests/conftest.py
 +++ b/tests/conftest.py
-@@ -71,10 +71,34 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
+@@ -71,10 +71,47 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
      return fm, body
  
  
++def _redirect_every_cache(monkeypatch, target) -> None:
++    """Point every cache implementation on the path at `target`.
++
++    The owned cache is always present. A host project's cache is present only
++    in a wired checkout, so it is redirected opportunistically — hard-coding it
++    would break the standalone layout, and omitting it would let host-backed
++    tests write into the operator's real cache.
++    """
++    monkeypatch.setenv("CACHE_DIR", str(target))
++    monkeypatch.setattr("mango.core.cache.CACHE_DIR", target)
++    try:
++        import terminalq.cache  # noqa: F401  (present only in a wired checkout)
++    except ImportError:
++        return
++    monkeypatch.setattr("terminalq.cache.CACHE_DIR", target)
++
++
 +@pytest.fixture(autouse=True)
 +def _never_touch_the_real_cache(tmp_path_factory, monkeypatch):
 +    """Redirect both caches for EVERY test, whether or not it asks.
@@ -2546,14 +2573,13 @@ index 249f268..af1047b 100644
 +    request `tmp_cache_dir`; this fixture only guarantees the floor.
 +    """
 +    sink = tmp_path_factory.mktemp("cache-sink")
-+    monkeypatch.setattr("terminalq.cache.CACHE_DIR", sink)
-+    monkeypatch.setattr("terminalq.mango.cache.CACHE_DIR", sink)
-+    monkeypatch.setenv("CACHE_DIR", str(sink))
++    _redirect_every_cache(monkeypatch, sink)
 +
 +
  @pytest.fixture
  def tmp_cache_dir(tmp_path, monkeypatch):
 -    """Provide isolated cache directory."""
+-    monkeypatch.setattr("terminalq.cache.CACHE_DIR", tmp_path)
 +    """Provide isolated cache directory.
 +
 +    Both cache implementations must be redirected. Missing either one lets a
@@ -2561,9 +2587,7 @@ index 249f268..af1047b 100644
 +    serves them as live data — which is how a fabricated CAPE reached the live
 +    cache on 2026-08-06.
 +    """
-     monkeypatch.setattr("terminalq.cache.CACHE_DIR", tmp_path)
-+    monkeypatch.setattr("terminalq.mango.cache.CACHE_DIR", tmp_path)
-+    monkeypatch.setenv("CACHE_DIR", str(tmp_path))
++    _redirect_every_cache(monkeypatch, tmp_path)
      return tmp_path
  
  

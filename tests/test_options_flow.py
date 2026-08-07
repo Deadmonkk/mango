@@ -1,11 +1,11 @@
-"""Tests for terminalq.providers.options_flow — dealer gamma / options walls."""
+"""Tests for mango.providers.options_flow — dealer gamma / options walls."""
 
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
 
-from terminalq.providers import options_flow
+from mango.providers import options_flow
 
 
 @pytest.fixture(autouse=True)
@@ -49,7 +49,7 @@ def _make_ticker(spot=600.0, with_options=True):
 
 async def test_dealer_gamma_computes_walls():
     with patch(
-        "terminalq.providers.options_flow.yfinance.Ticker",
+        "mango.providers.options_flow.yfinance.Ticker",
         return_value=_make_ticker(),
     ):
         result = await options_flow.get_dealer_gamma("SPY")
@@ -67,7 +67,7 @@ async def test_dealer_gamma_computes_walls():
 
 async def test_dealer_gamma_no_options_returns_error():
     with patch(
-        "terminalq.providers.options_flow.yfinance.Ticker",
+        "mango.providers.options_flow.yfinance.Ticker",
         return_value=_make_ticker(with_options=False),
     ):
         result = await options_flow.get_dealer_gamma("ILLIQUID")
@@ -78,7 +78,7 @@ async def test_dealer_gamma_no_options_returns_error():
 async def test_dealer_gamma_empty_price_returns_error():
     ticker = MagicMock()
     ticker.history.return_value = pd.DataFrame()
-    with patch("terminalq.providers.options_flow.yfinance.Ticker", return_value=ticker):
+    with patch("mango.providers.options_flow.yfinance.Ticker", return_value=ticker):
         result = await options_flow.get_dealer_gamma("SPY")
 
     assert "error" in result
@@ -114,7 +114,7 @@ async def test_dealer_gamma_survives_nan_open_interest():
     puts = pd.DataFrame({"strike": [580.0], "openInterest": [9000], "impliedVolatility": [nan]})
     ticker.option_chain.return_value = _chain(calls, puts)
 
-    with patch("terminalq.providers.options_flow.yfinance.Ticker", return_value=ticker):
+    with patch("mango.providers.options_flow.yfinance.Ticker", return_value=ticker):
         result = await options_flow.get_dealer_gamma("SPY")
 
     # Must return a valid result, not raise: the good (610 call / 580 put) rows survive.

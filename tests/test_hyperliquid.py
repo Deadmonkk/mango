@@ -1,13 +1,16 @@
 """Tests for the Hyperliquid derivatives fallback (single-venue) and its wiring
 into CoinGecko's derivatives dashboard when CoinGecko is unavailable."""
 
+from ._upstream_wiring import host_module
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
-from terminalq.providers import coingecko, hyperliquid
-from tests._upstream_wiring import requires
+coingecko = host_module("terminalq.providers.coingecko")
+from mango.providers import hyperliquid
+from ._upstream_wiring import requires
 
 
 @pytest.fixture(autouse=True)
@@ -85,7 +88,7 @@ async def test_fetch_derivatives_happy_path():
         [{"funding": "0.0000125", "openInterest": "100", "markPx": "60000"}],
     ]
     with patch(
-        "terminalq.providers.hyperliquid.httpx.AsyncClient",
+        "mango.providers.hyperliquid.httpx.AsyncClient",
         return_value=_mock_post_client(payload),
     ):
         out = await hyperliquid.fetch_derivatives(_FOCUS)
@@ -94,7 +97,7 @@ async def test_fetch_derivatives_happy_path():
 
 async def test_fetch_derivatives_bad_shape_returns_none():
     with patch(
-        "terminalq.providers.hyperliquid.httpx.AsyncClient",
+        "mango.providers.hyperliquid.httpx.AsyncClient",
         return_value=_mock_post_client({"not": "a list"}),
     ):
         assert await hyperliquid.fetch_derivatives(_FOCUS) is None
@@ -102,7 +105,7 @@ async def test_fetch_derivatives_bad_shape_returns_none():
 
 async def test_fetch_derivatives_network_error_returns_none():
     with patch(
-        "terminalq.providers.hyperliquid.httpx.AsyncClient",
+        "mango.providers.hyperliquid.httpx.AsyncClient",
         return_value=_mock_post_client(None, fail=True),
     ):
         assert await hyperliquid.fetch_derivatives(_FOCUS) is None

@@ -1,10 +1,10 @@
-"""Tests for terminalq.analytics.fred_archive — permanent local FRED history archive."""
+"""Tests for mango.analytics.fred_archive — permanent local FRED history archive."""
 
 import json
 
 import pytest
 
-from terminalq.analytics import fred_archive
+from mango.analytics import fred_archive
 
 
 @pytest.fixture(autouse=True)

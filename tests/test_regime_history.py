@@ -1,10 +1,10 @@
-"""Tests for terminalq.analytics.regime_history — forward-return calibration."""
+"""Tests for mango.analytics.regime_history — forward-return calibration."""
 
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from terminalq.analytics import regime_history
+from mango.analytics import regime_history
 
 
 @pytest.fixture(autouse=True)
@@ -36,7 +36,7 @@ async def test_regime_history_buckets_forward_returns():
     with (
         patch.object(regime_history, "latest_snapshot_per_day", return_value=snaps),
         patch.object(regime_history.historical, "get_historical", new=AsyncMock(side_effect=fake_get)),
-        patch("terminalq.analytics.regime_history.date") as mock_date,
+        patch("mango.analytics.regime_history.date") as mock_date,
     ):
         # Freeze "today" well past the 30-day horizon so the sample is matured.
         from datetime import date as real_date

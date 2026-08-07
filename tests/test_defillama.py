@@ -1,11 +1,11 @@
-"""Tests for terminalq.providers.defillama — DeFi TVL via DefiLlama (free, no API key)."""
+"""Tests for mango.providers.defillama — DeFi TVL via DefiLlama (free, no API key)."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
-from terminalq.providers import defillama
+from mango.providers import defillama
 
 
 @pytest.fixture(autouse=True)
@@ -53,7 +53,7 @@ async def test_get_defi_overview_success():
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("terminalq.providers.defillama.httpx.AsyncClient", return_value=mock_client):
+    with patch("mango.providers.defillama.httpx.AsyncClient", return_value=mock_client):
         result = await defillama.get_defi_overview()
 
     assert result["source"] == "defillama"
@@ -79,7 +79,7 @@ async def test_get_defi_overview_error():
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("terminalq.providers.defillama.httpx.AsyncClient", return_value=mock_client):
+    with patch("mango.providers.defillama.httpx.AsyncClient", return_value=mock_client):
         result = await defillama.get_defi_overview()
 
     assert "error" in result
@@ -93,7 +93,7 @@ async def test_get_defi_overview_cache_hit():
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("terminalq.providers.defillama.httpx.AsyncClient", return_value=mock_client) as mock_cls:
+    with patch("mango.providers.defillama.httpx.AsyncClient", return_value=mock_client) as mock_cls:
         first = await defillama.get_defi_overview()
         second = await defillama.get_defi_overview()
 
@@ -134,7 +134,7 @@ async def test_get_stablecoins_overview_success():
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("terminalq.providers.defillama.httpx.AsyncClient", return_value=mock_client):
+    with patch("mango.providers.defillama.httpx.AsyncClient", return_value=mock_client):
         result = await defillama.get_stablecoins_overview()
 
     assert result["source"] == "defillama"
@@ -157,7 +157,7 @@ async def test_get_stablecoins_overview_error():
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("terminalq.providers.defillama.httpx.AsyncClient", return_value=mock_client):
+    with patch("mango.providers.defillama.httpx.AsyncClient", return_value=mock_client):
         result = await defillama.get_stablecoins_overview()
 
     assert "error" in result

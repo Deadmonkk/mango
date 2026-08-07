@@ -1,11 +1,11 @@
-"""Tests for terminalq.providers.prediction_markets — Polymarket odds."""
+"""Tests for mango.providers.prediction_markets — Polymarket odds."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
-from terminalq.providers import prediction_markets
+from mango.providers import prediction_markets
 
 
 @pytest.fixture(autouse=True)
@@ -68,7 +68,7 @@ def _mock_client(payload=_SEARCH, fail=False):
 
 async def test_prediction_markets_parses_probabilities():
     with patch(
-        "terminalq.providers.prediction_markets.httpx.AsyncClient",
+        "mango.providers.prediction_markets.httpx.AsyncClient",
         return_value=_mock_client(),
     ):
         result = await prediction_markets.get_prediction_markets("Fed rate")
@@ -88,7 +88,7 @@ async def test_prediction_markets_parses_probabilities():
 async def test_prediction_markets_skips_unpriced():
     payload = {"events": [{"title": "x", "markets": [{"question": "q", "outcomePrices": None}]}]}
     with patch(
-        "terminalq.providers.prediction_markets.httpx.AsyncClient",
+        "mango.providers.prediction_markets.httpx.AsyncClient",
         return_value=_mock_client(payload=payload),
     ):
         result = await prediction_markets.get_prediction_markets("x")
@@ -99,7 +99,7 @@ async def test_prediction_markets_skips_unpriced():
 
 async def test_prediction_markets_failure_returns_error():
     with patch(
-        "terminalq.providers.prediction_markets.httpx.AsyncClient",
+        "mango.providers.prediction_markets.httpx.AsyncClient",
         return_value=_mock_client(fail=True),
     ):
         result = await prediction_markets.get_prediction_markets("Fed rate")

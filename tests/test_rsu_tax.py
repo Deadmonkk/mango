@@ -1,10 +1,10 @@
-"""Tests for terminalq.providers.rsu_tax — RSU vest tax-timing estimates."""
+"""Tests for mango.providers.rsu_tax — RSU vest tax-timing estimates."""
 
 from unittest.mock import patch
 
 import pytest
 
-from terminalq.providers import rsu_tax
+from mango.providers import rsu_tax
 
 
 @pytest.fixture(autouse=True)
@@ -21,7 +21,7 @@ _SCHEDULE = [
 
 
 async def test_rsu_tax_computes_upcoming_totals():
-    with patch("terminalq.providers.rsu_tax.load_rsu_schedule", return_value=_SCHEDULE):
+    with patch("mango.providers.rsu_tax.load_rsu_schedule", return_value=_SCHEDULE):
         result = await rsu_tax.get_rsu_tax_analysis(marginal_rate=0.30, ltcg_rate=0.15)
 
     assert result["source"] == "rsu_tax (local)"
@@ -36,7 +36,7 @@ async def test_rsu_tax_computes_upcoming_totals():
 
 
 async def test_rsu_tax_no_schedule_returns_error():
-    with patch("terminalq.providers.rsu_tax.load_rsu_schedule", return_value=[]):
+    with patch("mango.providers.rsu_tax.load_rsu_schedule", return_value=[]):
         result = await rsu_tax.get_rsu_tax_analysis()
     assert "error" in result
     assert "No RSU schedule" in result["error"]
@@ -53,7 +53,7 @@ async def test_rsu_tax_skips_unparseable_rows():
         {"date": "2099-06-20", "est_value": "garbage"},
         {"date": "2099-07-20", "grant": "G", "pct_of_grant": "25%", "est_value": "$12,000"},
     ]
-    with patch("terminalq.providers.rsu_tax.load_rsu_schedule", return_value=schedule):
+    with patch("mango.providers.rsu_tax.load_rsu_schedule", return_value=schedule):
         result = await rsu_tax.get_rsu_tax_analysis(marginal_rate=0.25)
 
     assert len(result["all_vests"]) == 1

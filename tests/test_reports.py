@@ -1,10 +1,10 @@
-"""Tests for terminalq.providers.reports — recent-report loader for the digest."""
+"""Tests for mango.providers.reports — recent-report loader for the digest."""
 
 from unittest.mock import patch
 
 import pytest
 
-from terminalq.providers import reports
+from mango.providers import reports
 
 _REPORT = """# FR June 11, 2026
 

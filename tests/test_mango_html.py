@@ -1,8 +1,8 @@
-"""Tests for terminalq.mango.html — HTML tag stripping and table parsing."""
+"""Tests for mango.core.html — HTML tag stripping and table parsing."""
 
 import pytest
 
-from terminalq.mango.html import BROWSER_HEADERS, strip_tags, table_rows
+from mango.core.html import BROWSER_HEADERS, strip_tags, table_rows
 
 
 class TestBrowserHeaders:

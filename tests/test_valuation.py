@@ -1,10 +1,10 @@
-"""Tests for terminalq.providers.valuation — CAPE, earnings yield, equity risk premium."""
+"""Tests for mango.providers.valuation — CAPE, earnings yield, equity risk premium."""
 
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from terminalq.providers import valuation
+from mango.providers import valuation
 
 
 @pytest.fixture(autouse=True)

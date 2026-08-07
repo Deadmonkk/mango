@@ -1,6 +1,6 @@
 """Tests for crypto_analytics helpers."""
 
-from terminalq.providers import crypto_analytics
+from mango.providers import crypto_analytics
 
 
 def test_satoshi_to_btc_converts_positive_values():

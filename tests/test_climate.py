@@ -1,11 +1,11 @@
-"""Tests for terminalq.providers.climate — NASA POWER production-risk watch."""
+"""Tests for mango.providers.climate — NASA POWER production-risk watch."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
-from terminalq.providers import climate
+from mango.providers import climate
 
 
 @pytest.fixture(autouse=True)
@@ -65,7 +65,7 @@ async def test_flags_hot_dry_region():
     daily = _daily_payload([30.0, 31.0, 29.0], [0.0, 0.0, 0.0])
     clim = _climatology_payload(month_abbr, normal_temp=20.0, normal_precip=5.0)
 
-    with patch("terminalq.providers.climate.httpx.AsyncClient", return_value=_mock_client(daily, clim)):
+    with patch("mango.providers.climate.httpx.AsyncClient", return_value=_mock_client(daily, clim)):
         result = await climate.get_climate_risk_watch()
 
     assert "regions" in result
@@ -86,7 +86,7 @@ async def test_normal_conditions_not_flagged():
     daily = _daily_payload([20.0, 20.0, 20.0], [5.0, 5.0, 5.0])
     clim = _climatology_payload(month_abbr, normal_temp=20.0, normal_precip=5.0)
 
-    with patch("terminalq.providers.climate.httpx.AsyncClient", return_value=_mock_client(daily, clim)):
+    with patch("mango.providers.climate.httpx.AsyncClient", return_value=_mock_client(daily, clim)):
         result = await climate.get_climate_risk_watch()
 
     assert result["flagged_regions"] == []
@@ -96,7 +96,7 @@ async def test_normal_conditions_not_flagged():
 
 async def test_source_failure_returns_error_not_exception():
     with patch(
-        "terminalq.providers.climate.httpx.AsyncClient",
+        "mango.providers.climate.httpx.AsyncClient",
         return_value=_mock_client({}, {}, fail=True),
     ):
         result = await climate.get_climate_risk_watch()

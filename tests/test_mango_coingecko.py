@@ -1,4 +1,4 @@
-"""Tests for terminalq.mango.coingecko — the CoinGecko API helper.
+"""Tests for mango.core.coingecko — the CoinGecko API helper.
 
 All HTTP is faked (httpx.AsyncClient / responses are mocked); no test may
 touch the network. AAA structure throughout.
@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
-from terminalq.mango import coingecko
+from mango.core import coingecko
 
 
 # --- helpers -----------------------------------------------------------
@@ -32,7 +32,7 @@ def _mock_response(json_data: dict | None = None, status_code: int = 200, header
 @pytest.fixture(autouse=True)
 def _isolated_cache(tmp_path, monkeypatch):
     """Redirect the shared file cache to a throwaway dir for every test."""
-    from terminalq.mango import cache
+    from mango.core import cache
 
     monkeypatch.setattr(cache, "CACHE_DIR", tmp_path)
 

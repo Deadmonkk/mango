@@ -1,7 +1,7 @@
-"""Tests for terminalq.mango.historical — Yahoo Finance OHLCV bars and dividends.
+"""Tests for mango.core.historical — Yahoo Finance OHLCV bars and dividends.
 
 All network access is faked by patching the lazy yfinance proxy's ``Ticker``
-attribute (`terminalq._lazy_yfinance.yfinance`) as imported into the module
+attribute (`mango._lazy_yfinance.yfinance`) as imported into the module
 under test; no test may reach the real yfinance/Yahoo Finance.
 """
 
@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
-from terminalq.mango import historical
+from mango.core import historical
 
 
 @pytest.fixture(autouse=True)

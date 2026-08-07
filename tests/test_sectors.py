@@ -1,10 +1,10 @@
-"""Tests for terminalq.providers.sectors — sector rotation vs SPY."""
+"""Tests for mango.providers.sectors — sector rotation vs SPY."""
 
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from terminalq.providers import sectors
+from mango.providers import sectors
 
 
 @pytest.fixture(autouse=True)

@@ -1,8 +1,8 @@
-"""Tests for terminalq.backfill — best-effort parse of FR markdown reports."""
+"""Tests for mango.backfill — best-effort parse of FR markdown reports."""
 
 import pytest
 
-from terminalq import backfill, history
+from mango import backfill, history
 
 _REPORT_NEW = """# FR June 11, 2026
 

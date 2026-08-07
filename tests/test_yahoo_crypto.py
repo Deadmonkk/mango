@@ -1,13 +1,17 @@
-"""Tests for the Yahoo Finance crypto fallback (terminalq.providers.yahoo_crypto)
+"""Tests for the Yahoo Finance crypto fallback (mango.providers.yahoo_crypto)
 and its wiring into CoinGecko quote/batch and crypto technicals."""
+
+from ._upstream_wiring import host_module
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pandas as pd
 import pytest
 
-from terminalq.providers import coingecko, crypto_analytics, yahoo_crypto
-from tests._upstream_wiring import requires
+coingecko = host_module("terminalq.providers.coingecko")
+from mango.providers import crypto_analytics
+from mango.providers import yahoo_crypto
+from ._upstream_wiring import requires
 
 
 @pytest.fixture(autouse=True)

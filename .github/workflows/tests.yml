@@ -10,43 +10,52 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      # This pack is an overlay, not a standalone package: it imports TerminalQ's
-      # cache, config, logging and base providers. So CI reconstructs a real
-      # install — check out upstream, drop this pack on top, run the suite.
-      - name: Check out this extension pack
+      # Mango is a standalone package. CI used to check out a third-party host
+      # project and overlay this code onto it, because the package imported that
+      # project's cache, config, logging and base providers. Those are all owned
+      # now, so CI installs and tests Mango on its own — which is also what
+      # proves the independence claim rather than asserting it.
+      - name: Check out Mango
         uses: actions/checkout@v4
-        with:
-          path: extensions
-
-      - name: Check out TerminalQ (the host project)
-        uses: actions/checkout@v4
-        with:
-          repository: fakoli/terminalq
-          path: terminalq
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Overlay the extension pack onto TerminalQ
-        run: |
-          cp -r extensions/src/terminalq/* terminalq/src/terminalq/
-          cp -r extensions/tests/* terminalq/tests/
-          cp -r extensions/scripts terminalq/
-
-      - name: Install dependencies
-        working-directory: terminalq
+      - name: Install
         run: |
           python -m pip install --upgrade pip
           pip install -e .
-          pip install pandas pytest pytest-asyncio
+          pip install pytest pytest-asyncio
 
-      # Only this pack's tests. Upstream's own suite is its business, and its
-      # plugin-layout contract tests assert things this overlay deliberately
-      # does not ship (new providers are not registered in server.py here).
-      - name: Run the extension pack's tests
-        working-directory: terminalq
+      - name: Run the test suite
+        run: python -m pytest tests -q
+
+      # Tests that exercise host-project wiring skip rather than fail when no
+      # host is present (see tests/_upstream_wiring.py). That is correct, but it
+      # would also hide a genuine collection break, so assert the suite actually
+      # ran a substantial number of tests rather than silently skipping most.
+      - name: Fail if most of the suite skipped
         run: |
-          FILES=$(cd ../extensions/tests && ls test_*.py | sed 's|^|tests/|' | tr '\n' ' ')
-          python -m pytest $FILES -q
+          python - <<'PY'
+          import re, subprocess, sys
+          out = subprocess.run([sys.executable, "-m", "pytest", "tests", "-q"],
+                               capture_output=True, text=True).stdout
+          m = re.search(r"(\d+) passed", out)
+          passed = int(m.group(1)) if m else 0
+          print(f"{passed} tests passed")
+          if passed < 300:
+              sys.exit(f"only {passed} tests passed — expected the full suite; "
+                       "a collection error may be masquerading as skips")
+          PY
+
+      - name: Confirm no hard dependency on the host project
+        run: |
+          # Guarded, optional imports are fine — they are wrapped in try/except
+          # so the package still imports standalone. An unguarded one is not.
+          if grep -rn --include="*.py" "^from terminalq\|^import terminalq" src/; then
+            echo "Unguarded host import found at module top level (see above)."
+            exit 1
+          fi
+          echo "No top-level host imports."

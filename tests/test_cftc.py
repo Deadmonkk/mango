@@ -1,11 +1,11 @@
-"""Tests for terminalq.providers.cftc — CFTC Commitment of Traders (free, no API key)."""
+"""Tests for mango.providers.cftc — CFTC Commitment of Traders (free, no API key)."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
-from terminalq.providers import cftc
+from mango.providers import cftc
 
 
 @pytest.fixture(autouse=True)
@@ -62,7 +62,7 @@ async def test_get_cot_report_success():
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("terminalq.providers.cftc.httpx.AsyncClient", return_value=mock_client):
+    with patch("mango.providers.cftc.httpx.AsyncClient", return_value=mock_client):
         result = await cftc.get_cot_report("btc")
 
     assert result["source"] == "cftc"
@@ -101,7 +101,7 @@ async def test_get_cot_report_no_data():
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("terminalq.providers.cftc.httpx.AsyncClient", return_value=mock_client):
+    with patch("mango.providers.cftc.httpx.AsyncClient", return_value=mock_client):
         result = await cftc.get_cot_report("btc")
 
     assert "error" in result
@@ -115,7 +115,7 @@ async def test_get_cot_report_connection_error():
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("terminalq.providers.cftc.httpx.AsyncClient", return_value=mock_client):
+    with patch("mango.providers.cftc.httpx.AsyncClient", return_value=mock_client):
         result = await cftc.get_cot_report("btc")
 
     assert "error" in result
@@ -129,7 +129,7 @@ async def test_get_cot_report_cache_hit():
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("terminalq.providers.cftc.httpx.AsyncClient", return_value=mock_client) as mock_cls:
+    with patch("mango.providers.cftc.httpx.AsyncClient", return_value=mock_client) as mock_cls:
         first = await cftc.get_cot_report("btc")
         second = await cftc.get_cot_report("btc")
 

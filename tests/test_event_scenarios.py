@@ -1,11 +1,13 @@
-"""Tests for terminalq.providers.event_scenarios — event reaction scaffolding."""
+"""Tests for mango.providers.event_scenarios — event reaction scaffolding."""
 
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from terminalq.providers import event_scenarios, fred
-from tests._upstream_wiring import requires
+from ._upstream_wiring import host_module, requires
+from mango.providers import event_scenarios
+
+fred = host_module("terminalq.providers.fred")
 
 
 @pytest.fixture(autouse=True)

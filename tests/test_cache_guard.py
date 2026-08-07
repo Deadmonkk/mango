@@ -1,6 +1,6 @@
 """Errors must never be cached — see cache_guard for the incident this encodes."""
 
-from terminalq.cache_guard import contains_error, should_cache
+from mango.cache_guard import contains_error, should_cache
 
 
 def test_returns_false_for_clean_payload():

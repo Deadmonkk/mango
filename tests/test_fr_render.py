@@ -203,7 +203,7 @@ class TestMvrvTwoSource:
     def test_signal_bands(self) -> None:
         import sys
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-        from terminalq.providers.crypto_analytics import _mvrv_signal
+        from mango.providers.crypto_analytics import _mvrv_signal
 
         assert "capitulation" in _mvrv_signal(0.85)
         assert "stretched" in _mvrv_signal(4.0)
@@ -399,7 +399,7 @@ class TestFundingWeighting:
     def test_dust_venue_cannot_move_the_aggregate(self) -> None:
         import sys
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-        from terminalq.providers.crypto_funding import _weighted_funding
+        from mango.providers.crypto_funding import _weighted_funding
 
         contracts = [
             {"market": "BigVenue", "funding_rate": 0.002, "open_interest": 20e9},
@@ -411,7 +411,7 @@ class TestFundingWeighting:
         assert out["excluded_as_outliers"][0]["market"] == "Ostium"
 
     def test_outlier_band_rejects_impossible_btc_quotes(self) -> None:
-        from terminalq.providers.crypto_funding import OUTLIER_ABS_PCT_8H, _weighted_funding
+        from mango.providers.crypto_funding import OUTLIER_ABS_PCT_8H, _weighted_funding
 
         # Worst major-venue ALTCOIN funding observed was ~0.38%/8h; a BTC quote
         # beyond the band is bad data, not a market.
@@ -424,7 +424,7 @@ class TestFundingWeighting:
         assert out["funding_8h_pct"] == 0.01
 
     def test_oi_weighting_favours_the_deep_venue(self) -> None:
-        from terminalq.providers.crypto_funding import _weighted_funding
+        from mango.providers.crypto_funding import _weighted_funding
 
         out = _weighted_funding([
             {"market": "deep", "funding_rate": 0.00, "open_interest": 40e9},
@@ -434,12 +434,12 @@ class TestFundingWeighting:
         assert out["funding_8h_pct"] < 0.01
 
     def test_no_qualifying_venues_errors_rather_than_guessing(self) -> None:
-        from terminalq.providers.crypto_funding import _weighted_funding
+        from mango.providers.crypto_funding import _weighted_funding
 
         assert "error" in _weighted_funding([{"market": "x", "funding_rate": 0.01, "open_interest": 5.0}])
 
     def test_annualization_matches_convention(self) -> None:
-        from terminalq.providers.crypto_funding import annualize_8h
+        from mango.providers.crypto_funding import annualize_8h
 
         assert annualize_8h(0.01) == 10.95   # the ~11%/yr historical norm
         assert annualize_8h(0.0023) == 2.52  # Coinglass OI-weighted read, 2026-08-05

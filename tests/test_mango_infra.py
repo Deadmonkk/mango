@@ -8,9 +8,9 @@ import sys
 
 import pytest
 
-from terminalq.mango import limiter as limiter_module
-from terminalq.mango.limiter import RateLimiter
-from terminalq.mango.logging import _resolve_log_level, get_logger, log
+from mango.core import limiter as limiter_module
+from mango.core.limiter import RateLimiter
+from mango.core.logging import _resolve_log_level, get_logger, log
 
 
 class FakeClock:
@@ -152,13 +152,13 @@ class TestLogSetup:
         assert callable(log.warning)
         assert callable(log.error)
 
-    def test_log_name_is_terminalq(self) -> None:
+    def test_log_name_is_mango(self) -> None:
         # Arrange / Act / Assert
-        assert log.name == "terminalq"
+        assert log.name == "mango"
 
     def test_repeated_configuration_does_not_duplicate_handlers(self) -> None:
         # Arrange
-        from terminalq.mango import logging as mango_logging
+        from mango.core import logging as mango_logging
 
         handler_count_before = len(mango_logging.log.handlers)
         stream_handlers_before = [
@@ -199,7 +199,7 @@ class TestLogSetup:
         child = get_logger("fred")
 
         # Assert
-        assert child.name == "terminalq.fred"
+        assert child.name == "mango.fred"
 
     def test_get_logger_child_inherits_root_effective_level(self) -> None:
         # Arrange / Act

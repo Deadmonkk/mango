@@ -5,8 +5,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from terminalq.providers import fed_calendar, finnhub
-from tests._upstream_wiring import requires
+from ._upstream_wiring import host_module, requires
+from mango.providers import fed_calendar
+
+finnhub = host_module("terminalq.providers.finnhub")
 
 
 @pytest.fixture(autouse=True)
@@ -61,7 +63,7 @@ async def test_get_fomc_meetings_window_and_next():
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("terminalq.providers.fed_calendar.httpx.AsyncClient", return_value=mock_client):
+    with patch("mango.providers.fed_calendar.httpx.AsyncClient", return_value=mock_client):
         result = await fed_calendar.get_fomc_meetings(days_ahead=400)
 
     assert result["source"] == "federalreserve.gov"
@@ -76,7 +78,7 @@ async def test_get_fomc_meetings_fetch_failure_returns_error():
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("terminalq.providers.fed_calendar.httpx.AsyncClient", return_value=mock_client):
+    with patch("mango.providers.fed_calendar.httpx.AsyncClient", return_value=mock_client):
         result = await fed_calendar.get_fomc_meetings()
 
     assert "error" in result
