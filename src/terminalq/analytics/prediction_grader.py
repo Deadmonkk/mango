@@ -18,7 +18,7 @@ from datetime import date, datetime
 from terminalq.mango.logging import log
 
 from terminalq.history import load_predictions, update_prediction
-from terminalq.providers import historical
+from terminalq.mango import historical
 
 # A prediction must settle on the price at its DUE date, not at whatever date
 # grading happens to run. Grading is often late (the ledger settles on the next
