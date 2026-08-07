@@ -30,6 +30,7 @@ CLASSIFICATIONS_FILENAME = "etf-classifications.md"
 # Bucket for any symbol not found in etf-classifications.md — unmapped
 # symbols are surfaced, never silently dropped from the breakdown.
 UNCLASSIFIED_BUCKET = "Unclassified"
+UNKNOWN_BUCKET = "Unknown"  # region / sub-class with no mapping
 
 # A single position exceeding this share of total portfolio market value is
 # flagged as a concentration risk. 20% is a common rule-of-thumb single-name
@@ -95,7 +96,7 @@ def _asset_class_for(symbol: str, classifications: dict[str, dict[str, str]]) ->
     return asset_class or UNCLASSIFIED_BUCKET
 
 
-async def compute_allocation() -> dict:
+def compute_allocation() -> dict:
     """Break the portfolio down by asset class and flag single-position concentration.
 
     Reads holdings via `mango.core.portfolio.load_portfolio()` and maps each
@@ -134,13 +135,50 @@ async def compute_allocation() -> dict:
         for asset_class, value in sorted(class_totals.items(), key=lambda kv: kv[1], reverse=True)
     ]
 
+    # `by_region` and `by_sub_class` mirror `by_asset_class`: a plain
+    # {label: market_value} map. The classifications file already carries both
+    # columns, so omitting them would drop real breakdowns the report offers.
+    def _totals_by(field: str) -> dict[str, float]:
+        totals: dict[str, float] = {}
+        for symbol, market_value in market_value_by_symbol.items():
+            row = classifications.get(symbol) or {}
+            # "Unknown" matches the vocabulary already used for region and
+            # sub-class in saved output; "Unclassified" is reserved for asset
+            # class. Unmapped symbols are still counted, so these totals
+            # reconcile to total_value — dropping them would not.
+            label = (row.get(field) or "").strip() or UNKNOWN_BUCKET
+            totals[label] = totals.get(label, 0.0) + market_value
+        return {k: round(v, _ROUND_DP) for k, v in sorted(totals.items(), key=lambda kv: kv[1], reverse=True)}
+
+    holdings_detail = []
+    for symbol, market_value in sorted(market_value_by_symbol.items(), key=lambda kv: kv[1], reverse=True):
+        row = classifications.get(symbol) or {}
+        holdings_detail.append({
+            "symbol": symbol,
+            "name": (row.get("name") or "").strip(),
+            "asset_class": _asset_class_for(symbol, classifications),
+            "region": (row.get("region") or "").strip() or UNKNOWN_BUCKET,
+            "sub_class": (row.get("sub_class") or "").strip() or UNKNOWN_BUCKET,
+            "market_value": round(market_value, _ROUND_DP),
+            "weight_pct": round(market_value / total_value * 100, _ROUND_DP),
+        })
+
     largest_symbol, largest_value = max(market_value_by_symbol.items(), key=lambda kv: kv[1])
     largest_pct = round(largest_value / total_value * 100, _ROUND_DP)
     concentration_flag = largest_pct > CONCENTRATION_THRESHOLD_PCT
 
     return {
+        # --- the shape existing consumers read ---
+        "total_value": round(total_value, _ROUND_DP),
+        "num_holdings": len(market_value_by_symbol),
+        "by_asset_class": {k: round(v, _ROUND_DP) for k, v in
+                           sorted(class_totals.items(), key=lambda kv: kv[1], reverse=True)},
+        "by_region": _totals_by("region"),
+        "by_sub_class": _totals_by("sub_class"),
+        "holdings": holdings_detail,
+        "unclassified": sorted(unclassified_symbols),
+        # --- additions ---
         "as_of": portfolio.get_portfolio_as_of(),
-        "total_market_value": round(total_value, _ROUND_DP),
         "asset_classes": asset_classes,
         "largest_position": {
             "symbol": largest_symbol,

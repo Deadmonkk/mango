@@ -19,6 +19,8 @@ ascending by date.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import math
 from typing import Any
 
@@ -241,8 +243,12 @@ def heatmap(rows: list[tuple[str, float]], title: str = "") -> str:
     return _proportional_bars(rows, title)
 
 
-def allocation_pie(slices: list[tuple[str, float]], title: str = "") -> str:
-    """Render `(label, value)` allocation slices as sorted, proportional bars.
+def allocation_pie(slices: Mapping[str, float] | list[tuple[str, float]], title: str = "") -> str:
+    """Render allocation slices as sorted, proportional bars.
+
+    Accepts either a `{label: value}` mapping or `(label, value)` pairs. The
+    mapping form is what allocation analysis produces (`by_asset_class`), and
+    requiring pairs would push a conversion onto every caller.
 
     A true pie chart cannot be drawn in monospace text; a proportional bar
     ranked by size conveys the same "share of whole" information without a
@@ -250,7 +256,8 @@ def allocation_pie(slices: list[tuple[str, float]], title: str = "") -> str:
     """
     if not slices:
         return _no_data(title)
-    return _proportional_bars(slices, title)
+    pairs = list(slices.items()) if isinstance(slices, Mapping) else list(slices)
+    return _proportional_bars(pairs, title)
 
 
 def sparkline(values: list[float]) -> str:
