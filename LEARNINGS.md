@@ -385,3 +385,36 @@ them, 7.2%, with a maximum reading of +2,296% in April 2020.
 is a hypothesis, not a finding. Backtest it against its own history before
 changing it. The cost of checking was one query; the cost of "fixing" a
 correctly-calibrated recession signal would have been silent and long-lived.
+
+## The criterion
+
+Entries 1–7 share one shape: something that looked authoritative and wasn't.
+Entries 8 and 9 add the other half — what to do about it — and they point at the
+same criterion:
+
+> **A claim isn't trustworthy because it's reasonable. It's trustworthy once
+> something independent has tested it.**
+
+The positive half matters as much as the negative. "Distrust everything" is not
+a workable engineering stance; it stops nothing and slows everything. This gives
+a condition under which confidence is actually earned, and a way to earn it.
+
+Two decisions in the 2026-08-07 session were settled this way, and both had
+started as plausible reasoning that turned out to be wrong:
+
+- **A recession threshold looked 20x too high** next to the Sahm rule. It was
+  not resolved by argument; it was resolved by backtesting 1,983 weeks and
+  finding it fires in 7.2% of them. The comparison that prompted the suspicion
+  was itself meaningless — the two measures use different scales.
+- **Switching the GDP series looked like it would break continuity** with the
+  archive. It was not resolved by intuition; it was resolved by counting the
+  affected reports, of which there was one.
+
+Note what the corrective action was in both cases. It was not "be more
+sceptical" — scepticism had already produced the objection. It was collecting
+the evidence that was missing. The deciding step was measuring, not
+speculating.
+
+The same applies to checks themselves, which is why entry 8 ends with a
+procedure rather than a warning: write the check, inject the failure it is
+meant to catch, watch it fail, then trust it.
