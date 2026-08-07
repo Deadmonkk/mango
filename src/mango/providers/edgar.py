@@ -868,6 +868,12 @@ async def get_13f_holdings(institution: str, limit: int = 20) -> dict:
         "institution_name": institution_name,
         "cik": cik,
         "report_date": filing_date,
+        # Portfolio-level totals describe the WHOLE filing, not the `limit`
+        # slice returned above — a report cites "90 positions, $263bn" while
+        # showing only the top holdings, so these must not be derived from
+        # `holdings`.
+        "total_positions": len(raw_holdings),
+        "total_value_thousands_usd": table_value_total,
         "holdings": holdings,
         "source": "edgar",
     }
