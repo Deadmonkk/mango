@@ -2,8 +2,8 @@
 derivatives, dominance, trending, and a screener.
 
 Clean-room implementation written directly from a written specification and
-CoinGecko's public docs (https://docs.gecko.com/reference/introduction), not
-from any existing CoinGecko client in this codebase family.
+CoinGecko's public docs (https://docs.coingecko.com/reference/introduction),
+not from any existing CoinGecko client in this codebase family.
 
 This module owns the *shape* of the data (what a "deep dive" or a "market
 overview" looks like); ``mango.core.coingecko`` owns the *mechanics* of

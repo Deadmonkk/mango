@@ -4,15 +4,13 @@ All HTTP is faked (httpx.AsyncClient is monkeypatched); no test may touch the
 network. AAA structure throughout.
 """
 
+import json as _json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
 from mango.providers import edgar
-
-pytestmark = pytest.mark.asyncio
-
 
 # --- helpers -----------------------------------------------------------
 
@@ -49,9 +47,6 @@ def _mock_client(handlers: list[tuple[str, MagicMock]]) -> AsyncMock:
     client.__aenter__ = AsyncMock(return_value=client)
     client.__aexit__ = AsyncMock(return_value=False)
     return client
-
-
-import json as _json
 
 
 def _ticker_map_json() -> str:
