@@ -19,11 +19,22 @@ The thresholds are judgement calls, not standards — a "high" VIX or an
 authoritative.
 """
 
-from terminalq import config as _upstream
+try:  # optional: this pack must import with no host project present
+    from terminalq import config as _upstream
+except ImportError:  # pragma: no cover - exercised only in a standalone install
+    _upstream = None
 
 
 def _from_upstream(name: str, default):
-    """Prefer TerminalQ's value when it defines one, else use our default."""
+    """Prefer the host's value when one is defined, else use our default.
+
+    The import above is optional so the pack stands alone. Every call below
+    passes a real default, so a missing host changes nothing except that the
+    defaults apply — which is the intended standalone behaviour, not a
+    degraded one.
+    """
+    if _upstream is None:
+        return default
     return getattr(_upstream, name, default)
 
 
