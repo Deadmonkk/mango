@@ -13,7 +13,7 @@ from terminalq.mango.logging import log
 
 from terminalq.mango import cache
 from terminalq.ext_settings import CACHE_TTL_FOMC
-from terminalq.providers import _html
+from terminalq.mango import html as _html
 
 CALENDAR_URL = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
 

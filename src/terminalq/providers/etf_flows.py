@@ -11,7 +11,7 @@ from terminalq.mango.logging import log
 
 from terminalq.mango import cache
 from terminalq.ext_settings import CACHE_TTL_ETF_FLOWS, ETF_FLOWS_DEFAULT_DAYS
-from terminalq.providers import _html
+from terminalq.mango import html as _html
 
 BASE_URL = "https://farside.co.uk/btc/"
 

@@ -22,7 +22,7 @@ from terminalq.ext_settings import (
     PUT_CALL_COMPLACENT_RATIO,
     PUT_CALL_FEAR_RATIO,
 )
-from terminalq.providers import _html
+from terminalq.mango import html as _html
 
 AAII_URL = "https://www.aaii.com/sentimentsurvey/sent_results"
 
