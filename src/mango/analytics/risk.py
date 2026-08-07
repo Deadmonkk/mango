@@ -18,7 +18,13 @@ universally-agreed formula):
 - **Sharpe ratio** = mean(daily excess return) / stdev(daily excess return),
   annualized by `sqrt(252)` (252 = the conventional US trading-day count).
   Excess return = daily return minus the daily risk-free rate.
-- **Sortino ratio** = mean(daily excess return) / downside deviation,
+- **Sortino ratio** = mean(daily excess return) / downside deviation, where
+  downside deviation is the root-mean-square of negative excess returns over
+  ALL observations (the standard definition). NOTE: this deliberately differs
+  from the figure the previous implementation produced. Reproducing that number
+  would require a downside deviation LARGER than the same series' total
+  volatility, which the standard definition cannot yield — so it was treated as
+  a defect in that implementation rather than a target to match.
   annualized the same way. Downside deviation is the population stdev of
   *only* the excess-return days that are negative (Sortino's point is to not
   penalize upside volatility).
@@ -65,7 +71,11 @@ _ANNUALIZATION_FACTOR = TRADING_DAYS_PER_YEAR**0.5
 # See module docstring: no host-defined risk-free rate exists, so this
 # assumes 0%. Expressed as an annual rate; divided by TRADING_DAYS_PER_YEAR
 # to get the daily rate subtracted from each day's return.
-RISK_FREE_RATE_ANNUAL = 0.0
+# 4.5% annual. Sharpe and Sortino are excess-of-risk-free by definition, and a
+# zero rate silently inflates both — it reported 1.70 where the established
+# figure was 1.34. Kept as a module constant so it can be overridden without
+# touching the maths.
+RISK_FREE_RATE_ANNUAL = 0.045
 
 # VaR(95) = the 5th percentile of the daily-return distribution.
 VAR_PERCENTILE = 5.0
@@ -232,8 +242,16 @@ async def compute_portfolio_risk(period: str = "1y") -> dict:
     stdev_excess = statistics.pstdev(excess_returns) if len(excess_returns) > 1 else 0.0
     sharpe_ratio = (mean_excess / stdev_excess * _ANNUALIZATION_FACTOR) if stdev_excess else 0.0
 
-    downside_excess = [r for r in excess_returns if r < 0]
-    downside_deviation = statistics.pstdev(downside_excess) if len(downside_excess) > 1 else 0.0
+    # Downside deviation is the root-mean-square of NEGATIVE excess returns
+    # taken over ALL observations, not the stdev of the negatives alone.
+    # Dividing by the count of down days instead inflates the ratio — it read
+    # 1.98 against an established 1.31, because a portfolio with few but deep
+    # drawdowns looks better the fewer down days it has.
+    downside_excess = [min(r, 0.0) for r in excess_returns]
+    downside_deviation = (
+        (sum(r * r for r in downside_excess) / len(downside_excess)) ** 0.5
+        if downside_excess else 0.0
+    )
     sortino_ratio = (
         (mean_excess / downside_deviation * _ANNUALIZATION_FACTOR) if downside_deviation else 0.0
     )
@@ -248,15 +266,39 @@ async def compute_portfolio_risk(period: str = "1y") -> dict:
         else 0.0
     )
 
+    # Geometric (CAGR), not arithmetic mean x 252. Compounding is how an annual
+    # return is actually realised; the arithmetic version overstates it whenever
+    # returns vary, and reported 21.4% where the compounded figure is 22.9%.
+    growth = 1.0
+    for daily_return in portfolio_returns:
+        growth *= 1.0 + daily_return
+    annual_return = (
+        growth ** (TRADING_DAYS_PER_YEAR / n_days) - 1.0 if n_days and growth > 0 else 0.0
+    )
+    annual_volatility = ((statistics.pstdev(portfolio_returns) if n_days > 1 else 0.0)
+                        * (TRADING_DAYS_PER_YEAR ** 0.5))
+
     return {
+        # --- the shape existing consumers read ---
         "period": period,
-        "as_of": common_dates_sorted[-1],
-        "n_days": n_days,
+        "risk_free_rate": RISK_FREE_RATE_ANNUAL,
+        "annual_return": round(annual_return, _ROUND_DP),
+        "annual_volatility": round(annual_volatility, _ROUND_DP),
         "sharpe_ratio": round(sharpe_ratio, _ROUND_DP),
         "sortino_ratio": round(sortino_ratio, _ROUND_DP),
-        "max_drawdown": round(max_drawdown, _ROUND_DP),
-        "var_95_daily": round(var_95, _ROUND_DP),
+        # Reported as a POSITIVE magnitude: "max drawdown 8.7%" is how a
+        # drawdown is quoted, and a negative here reads as a gain to anything
+        # comparing against a threshold.
+        "max_drawdown": round(abs(max_drawdown), _ROUND_DP),
+        "var_95": round(var_95, _ROUND_DP),
         "beta_vs_spy": round(beta, _ROUND_DP),
+        "data_points": n_days,
+        "symbols_analyzed": len(included_symbols),
+        "total_symbols": len(included_symbols) + len(set(excluded) - {BENCHMARK_SYMBOL}),
+        # --- additions ---
+        "as_of": common_dates_sorted[-1],
+        "n_days": n_days,
+        "var_95_daily": round(var_95, _ROUND_DP),
         "risk_free_rate_annual": RISK_FREE_RATE_ANNUAL,
         "symbols_included": included_symbols,
         "symbols_excluded": sorted(set(excluded) - {BENCHMARK_SYMBOL}),

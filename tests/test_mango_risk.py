@@ -112,19 +112,22 @@ async def test_compute_portfolio_risk_matches_hand_computed_metrics(monkeypatch)
     assert result["source"] == "risk"
     assert result["symbols_included"] == ["AAA", "BBB"]
     assert result["n_days"] == 5
-    assert result["risk_free_rate_annual"] == 0.0
+    assert result["risk_free_rate_annual"] == risk.RISK_FREE_RATE_ANNUAL
 
-    # Sharpe: mean(excess)/pstdev(excess) * sqrt(252), excess == portfolio
-    # returns since the risk-free rate is assumed 0%.
-    mean_excess = statistics.fmean(_PORTFOLIO_RETURNS)
-    stdev_excess = statistics.pstdev(_PORTFOLIO_RETURNS)
+    # Sharpe: mean(excess)/pstdev(excess) * sqrt(252). Excess is net of the
+    # daily risk-free rate, which is no longer zero.
+    daily_rf = risk.RISK_FREE_RATE_ANNUAL / 252
+    excess = [r - daily_rf for r in _PORTFOLIO_RETURNS]
+    mean_excess = statistics.fmean(excess)
+    stdev_excess = statistics.pstdev(excess)
     expected_sharpe = mean_excess / stdev_excess * (252**0.5)
     assert result["sharpe_ratio"] == pytest.approx(expected_sharpe, abs=1e-3)
 
-    # Sortino: same numerator, denominator is pstdev of only the negative
-    # excess-return days (-0.002 and -0.008 here).
-    downside = [r for r in _PORTFOLIO_RETURNS if r < 0]
-    downside_dev = statistics.pstdev(downside)
+    # Sortino: same numerator; denominator is the root-mean-square of negative
+    # excess returns over ALL observations, which is the standard definition.
+    # Using only the down days inflates the ratio — a portfolio with few but
+    # deep drawdowns would score better the fewer down days it had.
+    downside_dev = (sum(min(r, 0.0) ** 2 for r in excess) / len(excess)) ** 0.5
     expected_sortino = mean_excess / downside_dev * (252**0.5)
     assert result["sortino_ratio"] == pytest.approx(expected_sortino, abs=1e-3)
 
@@ -136,8 +139,9 @@ async def test_compute_portfolio_risk_matches_hand_computed_metrics(monkeypatch)
         cumulative *= 1 + r
         peak = max(peak, cumulative)
         worst = min(worst, cumulative / peak - 1)
-    assert result["max_drawdown"] == pytest.approx(worst, abs=1e-6)
-    assert result["max_drawdown"] < 0  # a real drawdown occurred
+    # Reported as a positive magnitude — "max drawdown 8.7%" is the convention.
+    assert result["max_drawdown"] == pytest.approx(abs(worst), abs=1e-6)
+    assert result["max_drawdown"] > 0  # a real drawdown occurred
 
     # VaR(95): 5th percentile of the 5 portfolio returns, linear interpolation.
     sorted_returns = sorted(_PORTFOLIO_RETURNS)
