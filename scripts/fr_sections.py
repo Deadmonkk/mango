@@ -247,7 +247,7 @@ def render_digest(raw: dict, derived: dict, date: str, mode: str = "fr") -> str:
     out = [
         f"# {mode.upper()} DIGEST — {date}",
         "",
-        f"*Report schema v{REPORT_SCHEMA_VERSION} — carry this into the saved report. Figures are only\ndirectly comparable with reports of the same schema; see CHANGELOG.md.*",
+        f"*Report schema v{REPORT_SCHEMA_VERSION} — carry this into the saved report. Figures may not\nbe directly comparable across schema versions; see CHANGELOG.md.*",
         "",
         "> Tables below are FINAL — built in Python from live provider results this run. "
         "Do NOT rebuild, re-order, or restate them. Every `Read` cell is either the provider's "
