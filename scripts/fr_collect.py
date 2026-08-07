@@ -62,6 +62,7 @@ from fr_sections import render_digest  # noqa: E402
 
 from mango.core.redact import redact  # noqa: E402
 from mango.core import fred as mango_fred  # noqa: E402
+from mango.core import fred  # noqa: E402
 
 from mango.analytics import (  # noqa: E402
     correlation,
@@ -86,12 +87,11 @@ from mango.providers import (  # noqa: E402
     sectors,
     valuation,
 )
-# Still provided by the host project; not part of this package.
-from terminalq.providers import (  # noqa: E402
+from mango.providers import (  # noqa: E402
+    # noqa: E402,
     coingecko,
     edgar,
     finnhub,
-    fred,
     search,
     technical,
 )
