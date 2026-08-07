@@ -19,6 +19,9 @@ The thresholds are judgement calls, not standards — a "high" VIX or an
 authoritative.
 """
 
+import os
+from pathlib import Path
+
 try:  # optional: this pack must import with no host project present
     from terminalq import config as _upstream
 except ImportError:  # pragma: no cover - exercised only in a standalone install
@@ -39,10 +42,19 @@ def _from_upstream(name: str, default):
 
 
 # Re-exported from upstream when present (TerminalQ already defines these).
-PORTFOLIO_DIR = _upstream.PORTFOLIO_DIR
+# Dereferencing _upstream directly here defeated the guarded import above: with
+# no host present _upstream is None and this raised AttributeError at import,
+# so the package could not load standalone at all.
+PORTFOLIO_DIR = _from_upstream("PORTFOLIO_DIR", Path.home() / ".terminalq")
 CACHE_TTL_HISTORY = _from_upstream("CACHE_TTL_HISTORY", 3600)
 CACHE_TTL_FUNDAMENTALS = _from_upstream("CACHE_TTL_FUNDAMENTALS", 86400)
-REPORTS_DIR = _from_upstream("REPORTS_DIR", PORTFOLIO_DIR / "reports")
+# Saved reports rarely live beside the portfolio data — they are usually
+# somewhere the operator reads them, so an env var is the primary source.
+# Without this, load_recent_reports pointed at a directory that does not exist.
+REPORTS_DIR = Path(
+    os.environ.get("REPORTS_DIR")
+    or _from_upstream("REPORTS_DIR", PORTFOLIO_DIR / "reports")
+).expanduser()
 
 # Defined by this pack. Each may be overridden upstream; see _from_upstream.
 AAII_SPREAD_EXTREME_PP = _from_upstream("AAII_SPREAD_EXTREME_PP", 10.0)
