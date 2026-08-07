@@ -1,10 +1,10 @@
-"""Tests for terminalq.providers.retail_sentiment — AAII survey + SPY put/call."""
+"""Tests for mango.providers.retail_sentiment — AAII survey + SPY put/call."""
 
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from terminalq.providers import retail_sentiment
+from mango.providers import retail_sentiment
 
 
 @pytest.fixture(autouse=True)

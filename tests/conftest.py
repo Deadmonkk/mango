@@ -71,6 +71,23 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
     return fm, body
 
 
+def _redirect_every_cache(monkeypatch, target) -> None:
+    """Point every cache implementation on the path at `target`.
+
+    The owned cache is always present. A host project's cache is present only
+    in a wired checkout, so it is redirected opportunistically — hard-coding it
+    would break the standalone layout, and omitting it would let host-backed
+    tests write into the operator's real cache.
+    """
+    monkeypatch.setenv("CACHE_DIR", str(target))
+    monkeypatch.setattr("mango.core.cache.CACHE_DIR", target)
+    try:
+        import terminalq.cache  # noqa: F401  (present only in a wired checkout)
+    except ImportError:
+        return
+    monkeypatch.setattr("terminalq.cache.CACHE_DIR", target)
+
+
 @pytest.fixture(autouse=True)
 def _never_touch_the_real_cache(tmp_path_factory, monkeypatch):
     """Redirect both caches for EVERY test, whether or not it asks.
@@ -82,9 +99,7 @@ def _never_touch_the_real_cache(tmp_path_factory, monkeypatch):
     request `tmp_cache_dir`; this fixture only guarantees the floor.
     """
     sink = tmp_path_factory.mktemp("cache-sink")
-    monkeypatch.setattr("terminalq.cache.CACHE_DIR", sink)
-    monkeypatch.setattr("terminalq.mango.cache.CACHE_DIR", sink)
-    monkeypatch.setenv("CACHE_DIR", str(sink))
+    _redirect_every_cache(monkeypatch, sink)
 
 
 @pytest.fixture
@@ -96,9 +111,7 @@ def tmp_cache_dir(tmp_path, monkeypatch):
     serves them as live data — which is how a fabricated CAPE reached the live
     cache on 2026-08-06.
     """
-    monkeypatch.setattr("terminalq.cache.CACHE_DIR", tmp_path)
-    monkeypatch.setattr("terminalq.mango.cache.CACHE_DIR", tmp_path)
-    monkeypatch.setenv("CACHE_DIR", str(tmp_path))
+    _redirect_every_cache(monkeypatch, tmp_path)
     return tmp_path
 
 

@@ -1,4 +1,4 @@
-"""Tests for terminalq.mango.fred — the FRED API client.
+"""Tests for mango.core.fred — the FRED API client.
 
 All HTTP is faked (httpx.AsyncClient is monkeypatched); no test may touch the
 network. AAA structure throughout.
@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from terminalq.mango import fred
+from mango.core import fred
 
 
 # --- helpers ---------------------------------------------------------------

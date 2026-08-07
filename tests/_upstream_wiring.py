@@ -30,3 +30,18 @@ def requires(module, attribute: str) -> pytest.MarkDecorator:
             f"during installation — not present in a clean checkout (see README)"
         ),
     )
+
+
+def host_module(dotted_name: str):
+    """Import a host-project module, or skip this whole test module if absent.
+
+    `requires` above guards a missing *attribute*, which presumes the module
+    imported at all. Standalone there is no host package, so the import itself
+    raises during collection — a hard error that implies the pack is broken when
+    it simply is not wired. This skips instead, with the module name in the
+    reason.
+    """
+    return pytest.importorskip(
+        dotted_name,
+        reason=f"{dotted_name} belongs to the host project; not present standalone",
+    )

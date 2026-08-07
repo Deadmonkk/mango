@@ -5,9 +5,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from ._upstream_wiring import requires
+from ._upstream_wiring import requires, host_module
 
-from terminalq.providers import coingecko
+coingecko = host_module("terminalq.providers.coingecko")
 
 
 @pytest.fixture(autouse=True)

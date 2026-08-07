@@ -1,10 +1,12 @@
 """Tests for fred.get_metric_context — percentile context for any FRED metric."""
 
+from ._upstream_wiring import host_module
+
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from terminalq.providers import fred_ext as fred
+from mango.providers import fred_ext as fred
 
 
 @pytest.fixture(autouse=True)

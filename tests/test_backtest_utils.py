@@ -1,11 +1,11 @@
-"""Tests for terminalq.analytics.backtest_utils — shared historical-window return helper."""
+"""Tests for mango.analytics.backtest_utils — shared historical-window return helper."""
 
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
 
-from terminalq.analytics import backtest_utils
+from mango.analytics import backtest_utils
 
 
 @pytest.fixture(autouse=True)
@@ -24,7 +24,7 @@ async def test_ticker_return_computed_from_first_and_last_close():
     mock_ticker = MagicMock()
     mock_ticker.history.return_value = df
 
-    with patch("terminalq.analytics.backtest_utils.yfinance.Ticker", return_value=mock_ticker):
+    with patch("mango.analytics.backtest_utils.yfinance.Ticker", return_value=mock_ticker):
         result = await backtest_utils.ticker_window_return(
             "ZC=F", "2015-10-01", "2016-04-30", cache_prefix="test", cache_ttl=60
         )
@@ -38,7 +38,7 @@ async def test_ticker_return_handles_empty_history():
     mock_ticker = MagicMock()
     mock_ticker.history.return_value = pd.DataFrame()
 
-    with patch("terminalq.analytics.backtest_utils.yfinance.Ticker", return_value=mock_ticker):
+    with patch("mango.analytics.backtest_utils.yfinance.Ticker", return_value=mock_ticker):
         result = await backtest_utils.ticker_window_return(
             "DELISTED", "2015-10-01", "2016-04-30", cache_prefix="test", cache_ttl=60
         )
@@ -50,7 +50,7 @@ async def test_ticker_return_handles_exception():
     mock_ticker = MagicMock()
     mock_ticker.history.side_effect = Exception("boom")
 
-    with patch("terminalq.analytics.backtest_utils.yfinance.Ticker", return_value=mock_ticker):
+    with patch("mango.analytics.backtest_utils.yfinance.Ticker", return_value=mock_ticker):
         result = await backtest_utils.ticker_window_return(
             "BAD", "2015-10-01", "2016-04-30", cache_prefix="test", cache_ttl=60
         )

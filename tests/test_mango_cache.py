@@ -1,4 +1,4 @@
-"""Tests for the mango file-based cache — see terminalq.mango.cache for the design rationale."""
+"""Tests for the mango file-based cache — see mango.core.cache for the design rationale."""
 
 import importlib
 import json
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from terminalq.mango import cache as mango_cache
+from mango.core import cache as mango_cache
 
 
 @pytest.fixture(autouse=True)

@@ -1,11 +1,11 @@
-"""Tests for terminalq.analytics.correlation_regime — correlation shift monitor."""
+"""Tests for mango.analytics.correlation_regime — correlation shift monitor."""
 
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
 
-from terminalq.analytics import correlation_regime
+from mango.analytics import correlation_regime
 
 
 @pytest.fixture(autouse=True)
@@ -52,7 +52,7 @@ def _ticker_factory(data_map: dict[str, list[float]]):
 async def test_correlation_regime_detects_shift():
     data_map = {"AAA": _A, "BBB": _B}
     with patch(
-        "terminalq.analytics.correlation.yfinance.Ticker",
+        "mango.analytics.correlation.yfinance.Ticker",
         side_effect=_ticker_factory(data_map),
     ):
         result = await correlation_regime.get_correlation_regime("AAA,BBB")
@@ -67,7 +67,7 @@ async def test_correlation_regime_detects_shift():
 async def test_correlation_regime_stable():
     data_map = {"AAA": _A_STABLE, "BBB": _B_STABLE}
     with patch(
-        "terminalq.analytics.correlation.yfinance.Ticker",
+        "mango.analytics.correlation.yfinance.Ticker",
         side_effect=_ticker_factory(data_map),
     ):
         result = await correlation_regime.get_correlation_regime("AAA,BBB")
@@ -79,7 +79,7 @@ async def test_correlation_regime_stable():
 async def test_correlation_regime_insufficient_data():
     data_map = {"AAA": [100.0, 101.0, 102.0]}  # too short
     with patch(
-        "terminalq.analytics.correlation.yfinance.Ticker",
+        "mango.analytics.correlation.yfinance.Ticker",
         side_effect=_ticker_factory(data_map),
     ):
         result = await correlation_regime.get_correlation_regime("AAA,BBB")

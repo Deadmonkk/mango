@@ -55,7 +55,7 @@ import os
 import statistics
 import sys
 
-from terminalq.mango.historical import get_historical
+from mango.core.historical import get_historical
 
 # Tickers used by --watchlist. Set the ADV_WATCHLIST env var (comma-separated)
 # to your own list, e.g. ADV_WATCHLIST="AAPL,MSFT,NVDA". The default below is

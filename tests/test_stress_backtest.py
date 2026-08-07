@@ -1,11 +1,11 @@
-"""Tests for terminalq.providers.stress_backtest — generalized metric stress backtest."""
+"""Tests for mango.providers.stress_backtest — generalized metric stress backtest."""
 
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
 
-from terminalq.providers import stress_backtest
+from mango.providers import stress_backtest
 
 
 @pytest.fixture(autouse=True)
@@ -29,7 +29,7 @@ async def test_vix_backtest_shapes_groups_with_returns():
     mock_ticker = MagicMock()
     mock_ticker.history.return_value = df
 
-    with patch("terminalq.analytics.backtest_utils.yfinance.Ticker", return_value=mock_ticker):
+    with patch("mango.analytics.backtest_utils.yfinance.Ticker", return_value=mock_ticker):
         result = await stress_backtest.get_metric_stress_backtest("vix_2020_covid")
 
     assert result["metric"] == "vix"
@@ -45,7 +45,7 @@ async def test_credit_event_uses_hyg_jnk_not_fred_series():
     mock_ticker = MagicMock()
     mock_ticker.history.return_value = df
 
-    with patch("terminalq.analytics.backtest_utils.yfinance.Ticker", return_value=mock_ticker):
+    with patch("mango.analytics.backtest_utils.yfinance.Ticker", return_value=mock_ticker):
         result = await stress_backtest.get_metric_stress_backtest("credit_2008_gfc")
 
     assert result["metric"] == "credit_spreads"
@@ -58,7 +58,7 @@ async def test_cpi_event_returns_inflation_linked_groups():
     mock_ticker = MagicMock()
     mock_ticker.history.return_value = df
 
-    with patch("terminalq.analytics.backtest_utils.yfinance.Ticker", return_value=mock_ticker):
+    with patch("mango.analytics.backtest_utils.yfinance.Ticker", return_value=mock_ticker):
         result = await stress_backtest.get_metric_stress_backtest("cpi_2021_22_surge")
 
     assert result["metric"] == "cpi"

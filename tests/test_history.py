@@ -1,8 +1,8 @@
-"""Tests for terminalq.history — append-only snapshot + prediction store."""
+"""Tests for mango.history — append-only snapshot + prediction store."""
 
 import pytest
 
-from terminalq import history
+from mango import history
 
 
 @pytest.fixture(autouse=True)

@@ -39,7 +39,7 @@ raw-data transport is moved out of context.
 ======================================================================
 BUILD STATUS: SKELETON. A fresh session must complete the TOOL_MAP by
 reading src/terminalq/server.py (each @mcp.tool() body shows which
-terminalq.providers.* function + args it calls) and wiring each FR source
+mango.providers.* function + args it calls) and wiring each FR source
 below to its provider call. The plumbing, brief writer, and failure handling
 are done. See FR_COLLECT_SPEC section at the bottom for the full field list.
 ======================================================================
@@ -60,37 +60,40 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from fr_sections import render_digest  # noqa: E402
 
-from terminalq.mango.redact import redact  # noqa: E402
-from terminalq.mango import fred as mango_fred  # noqa: E402
+from mango.core.redact import redact  # noqa: E402
+from mango.core import fred as mango_fred  # noqa: E402
 
-from terminalq.analytics import (  # noqa: E402
+from mango.analytics import (  # noqa: E402
     correlation,
     correlation_regime,
     prediction_grader,
     regime_history,
 )
-from terminalq.providers import (  # noqa: E402
+from mango.providers import (  # noqa: E402
     cftc,
     climate,
-    coingecko,
     crypto_analytics,
     crypto_funding,
-    gz_credit,
     cycle,
     defillama,
-    edgar,
     etf_flows,
-    finnhub,
-    fred,
     fred_ext,
+    gz_credit,
     market_data,
     mempool,
     options_flow,
     retail_sentiment,
-    search,
     sectors,
-    technical,
     valuation,
+)
+# Still provided by the host project; not part of this package.
+from terminalq.providers import (  # noqa: E402
+    coingecko,
+    edgar,
+    finnhub,
+    fred,
+    search,
+    technical,
 )
 
 # Output location. Set FR_BRIEF_DIR to point this at your own reports folder.
@@ -133,9 +136,9 @@ def dig(obj, path, default=FAIL):
 
 # ---------------------------------------------------------------------------
 # TOOL_MAP — TO BE COMPLETED by a fresh session (read server.py for each).
-# Each entry: label -> (callable, args, kwargs). Wire to terminalq.providers.*
+# Each entry: label -> (callable, args, kwargs). Wire to mango.providers.*
 # Example once discovered:
-#   from terminalq.providers import fred
+#   from mango.providers import fred
 #   "credit_spreads": (fred.get_credit_spreads, (), {}),
 # The FR source list (mirror the "FR" section of your report contract EXACTLY):
 #   crypto (16): crypto_market_overview, fear_greed(limit=7), crypto_deep(BTC),

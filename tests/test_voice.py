@@ -1,9 +1,9 @@
-"""Tests for terminalq.voice — macOS `say` spoken briefings."""
+"""Tests for mango.voice — macOS `say` spoken briefings."""
 
 import subprocess
 from unittest.mock import MagicMock, patch
 
-from terminalq import voice
+from mango import voice
 
 
 async def test_speak_invokes_say_with_args():

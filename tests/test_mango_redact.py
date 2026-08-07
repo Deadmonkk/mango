@@ -2,8 +2,8 @@
 
 import pytest
 
-from terminalq.mango import redact as redact_mod
-from terminalq.mango.redact import REDACTED, redact, redact_text
+from mango.core import redact as redact_mod
+from mango.core.redact import REDACTED, redact, redact_text
 
 FRED_ERROR = (
     "Client error '403 Forbidden' for url "

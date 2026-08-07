@@ -1,12 +1,12 @@
-"""Tests for terminalq.analytics.prediction_grader — settling due predictions."""
+"""Tests for mango.analytics.prediction_grader — settling due predictions."""
 
 from datetime import date, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from terminalq import history
-from terminalq.analytics import prediction_grader
+from mango import history
+from mango.analytics import prediction_grader
 
 
 @pytest.fixture(autouse=True)

@@ -1,11 +1,11 @@
-"""Tests for terminalq.providers.etf_flows — spot Bitcoin ETF flows scraped from Farside."""
+"""Tests for mango.providers.etf_flows — spot Bitcoin ETF flows scraped from Farside."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
-from terminalq.providers import etf_flows
+from mango.providers import etf_flows
 
 
 @pytest.fixture(autouse=True)
@@ -111,7 +111,7 @@ async def test_get_btc_etf_flows_success():
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("terminalq.providers.etf_flows.httpx.AsyncClient", return_value=mock_client):
+    with patch("mango.providers.etf_flows.httpx.AsyncClient", return_value=mock_client):
         result = await etf_flows.get_btc_etf_flows(days=2)
 
     assert result["source"] == "farside"
@@ -131,7 +131,7 @@ async def test_get_btc_etf_flows_blocked_returns_error():
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("terminalq.providers.etf_flows.httpx.AsyncClient", return_value=mock_client):
+    with patch("mango.providers.etf_flows.httpx.AsyncClient", return_value=mock_client):
         result = await etf_flows.get_btc_etf_flows()
 
     assert "error" in result
@@ -145,7 +145,7 @@ async def test_get_btc_etf_flows_unparseable_returns_error():
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("terminalq.providers.etf_flows.httpx.AsyncClient", return_value=mock_client):
+    with patch("mango.providers.etf_flows.httpx.AsyncClient", return_value=mock_client):
         result = await etf_flows.get_btc_etf_flows()
 
     assert "error" in result

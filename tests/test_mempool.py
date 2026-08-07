@@ -1,11 +1,11 @@
-"""Tests for terminalq.providers.mempool — BTC fee/congestion microstructure."""
+"""Tests for mango.providers.mempool — BTC fee/congestion microstructure."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
-from terminalq.providers import mempool
+from mango.providers import mempool
 
 
 @pytest.fixture(autouse=True)
@@ -39,7 +39,7 @@ def _mock_client(fees=_FEES, mempool_stats=_MEMPOOL, fail=False):
 
 
 async def test_get_btc_mempool_quiet_network():
-    with patch("terminalq.providers.mempool.httpx.AsyncClient", return_value=_mock_client()):
+    with patch("mango.providers.mempool.httpx.AsyncClient", return_value=_mock_client()):
         result = await mempool.get_btc_mempool()
 
     assert result["source"] == "mempool.space"
@@ -53,7 +53,7 @@ async def test_get_btc_mempool_quiet_network():
 async def test_get_btc_mempool_congested_network():
     hot_fees = {"fastestFee": 80, "halfHourFee": 60, "hourFee": 40, "economyFee": 20, "minimumFee": 5}
     with patch(
-        "terminalq.providers.mempool.httpx.AsyncClient",
+        "mango.providers.mempool.httpx.AsyncClient",
         return_value=_mock_client(fees=hot_fees),
     ):
         result = await mempool.get_btc_mempool()
@@ -63,7 +63,7 @@ async def test_get_btc_mempool_congested_network():
 
 async def test_get_btc_mempool_failure_returns_error():
     with patch(
-        "terminalq.providers.mempool.httpx.AsyncClient",
+        "mango.providers.mempool.httpx.AsyncClient",
         return_value=_mock_client(fail=True),
     ):
         result = await mempool.get_btc_mempool()

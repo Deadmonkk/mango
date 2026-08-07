@@ -6,9 +6,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from ._upstream_wiring import requires
+from ._upstream_wiring import requires, host_module
 
-from terminalq.providers import finnhub, fred_ext as fred
+finnhub = host_module("terminalq.providers.finnhub")
+from mango.providers import fred_ext as fred
 
 
 @pytest.fixture(autouse=True)
@@ -50,14 +51,14 @@ def _release_payload():
 
 
 async def test_release_calendar_filters_to_high_impact(monkeypatch):
-    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "test_key")
+    monkeypatch.setattr("mango.providers.fred_ext.FRED_API_KEY", "test_key")
 
     mock_client = AsyncMock()
     mock_client.get = AsyncMock(return_value=_mock_response(_release_payload()))
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("terminalq.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
+    with patch("mango.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
         result = await fred.get_release_calendar(days=7)
 
     assert result["source"] == "fred"
@@ -79,7 +80,7 @@ async def test_release_calendar_filters_to_high_impact(monkeypatch):
 
 
 async def test_release_calendar_no_key_returns_error(monkeypatch):
-    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "")
+    monkeypatch.setattr("mango.providers.fred_ext.FRED_API_KEY", "")
     result = await fred.get_release_calendar(days=7)
     assert "error" in result
     assert result["source"] == "fred"

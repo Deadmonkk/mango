@@ -1,6 +1,6 @@
-"""Tests for terminalq.analytics.percentiles — historical percentile context."""
+"""Tests for mango.analytics.percentiles — historical percentile context."""
 
-from terminalq.analytics import percentiles
+from mango.analytics import percentiles
 
 # ---------------------------------------------------------------------------
 # percentile_rank

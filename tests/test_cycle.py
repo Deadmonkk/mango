@@ -1,10 +1,10 @@
-"""Tests for terminalq.providers.cycle — recession & business-cycle dashboard."""
+"""Tests for mango.providers.cycle — recession & business-cycle dashboard."""
 
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from terminalq.providers import cycle
+from mango.providers import cycle
 
 
 @pytest.fixture(autouse=True)

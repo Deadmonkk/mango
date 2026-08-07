@@ -1,11 +1,11 @@
-"""Tests for terminalq.providers.climate stress-period backtest (Yahoo Finance mocked)."""
+"""Tests for mango.providers.climate stress-period backtest (Yahoo Finance mocked)."""
 
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
 
-from terminalq.providers import climate
+from mango.providers import climate
 
 
 @pytest.fixture(autouse=True)
@@ -29,7 +29,7 @@ async def test_full_backtest_shapes_regions_with_returns():
     mock_ticker = MagicMock()
     mock_ticker.history.return_value = df
 
-    with patch("terminalq.analytics.backtest_utils.yfinance.Ticker", return_value=mock_ticker):
+    with patch("mango.analytics.backtest_utils.yfinance.Ticker", return_value=mock_ticker):
         result = await climate.get_climate_stress_backtest("el_nino_2015_16")
 
     assert result["window"] == "2015-10-01 to 2016-04-30"

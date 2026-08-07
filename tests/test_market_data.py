@@ -1,10 +1,10 @@
-"""Tests for terminalq.providers.market_data — fed funds futures path and equity sentiment."""
+"""Tests for mango.providers.market_data — fed funds futures path and equity sentiment."""
 
 from unittest.mock import patch
 
 import pytest
 
-from terminalq.providers import market_data
+from mango.providers import market_data
 
 
 @pytest.fixture(autouse=True)

@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from terminalq.providers import crypto_analytics, mempool
+from mango.providers import crypto_analytics, mempool
 
 
 @pytest.fixture(autouse=True)
@@ -48,7 +48,7 @@ def _mock_mempool_client(*, hashrate=8.5e20, difficulty=1.2e14, tip="880000", fa
 
 
 async def test_fetch_network_stats_converts_hashrate_to_gh_s():
-    with patch("terminalq.providers.mempool.httpx.AsyncClient", return_value=_mock_mempool_client()):
+    with patch("mango.providers.mempool.httpx.AsyncClient", return_value=_mock_mempool_client()):
         stats = await mempool.fetch_btc_network_stats()
     # 8.5e20 H/s ÷ 1e9 = 8.5e11 GH/s
     assert stats["hash_rate_gh_s"] == 8.5e11
@@ -58,7 +58,7 @@ async def test_fetch_network_stats_converts_hashrate_to_gh_s():
 
 async def test_fetch_network_stats_returns_none_on_failure():
     with patch(
-        "terminalq.providers.mempool.httpx.AsyncClient",
+        "mango.providers.mempool.httpx.AsyncClient",
         return_value=_mock_mempool_client(fail=True),
     ):
         assert await mempool.fetch_btc_network_stats() is None
@@ -104,7 +104,7 @@ def _mock_blockchain_client(*, fail=False):
 
 async def test_onchain_uses_blockchain_com_when_available():
     with patch(
-        "terminalq.providers.crypto_analytics.httpx.AsyncClient",
+        "mango.providers.crypto_analytics.httpx.AsyncClient",
         return_value=_mock_blockchain_client(),
     ):
         result = await crypto_analytics.get_btc_onchain()
@@ -119,7 +119,7 @@ async def test_onchain_falls_back_to_mempool_with_none_tx_fields():
     fallback_stats = {"hash_rate_gh_s": 8.5e11, "difficulty": 1.2e14, "total_blocks_mined": 880000}
     with (
         patch(
-            "terminalq.providers.crypto_analytics.httpx.AsyncClient",
+            "mango.providers.crypto_analytics.httpx.AsyncClient",
             return_value=_mock_blockchain_client(fail=True),
         ),
         patch.object(crypto_analytics.mempool, "fetch_btc_network_stats", AsyncMock(return_value=fallback_stats)),
@@ -142,7 +142,7 @@ async def test_onchain_falls_back_to_mempool_with_none_tx_fields():
 async def test_onchain_error_when_both_sources_down():
     with (
         patch(
-            "terminalq.providers.crypto_analytics.httpx.AsyncClient",
+            "mango.providers.crypto_analytics.httpx.AsyncClient",
             return_value=_mock_blockchain_client(fail=True),
         ),
         patch.object(crypto_analytics.mempool, "fetch_btc_network_stats", AsyncMock(return_value=None)),

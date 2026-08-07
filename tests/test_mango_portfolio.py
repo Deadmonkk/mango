@@ -1,4 +1,4 @@
-"""Tests for terminalq.mango.portfolio.
+"""Tests for mango.core.portfolio.
 
 All fixtures are synthetic (made-up tickers, round dollar amounts) written
 into `tmp_path` — never real holdings. `PORTFOLIO_DIR` is monkeypatched to
@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from terminalq.mango import portfolio
+from mango.core import portfolio
 
 
 @pytest.fixture(autouse=True)

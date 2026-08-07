@@ -1,12 +1,12 @@
-"""Tests for terminalq.analytics.correlation — cross-asset correlation matrix."""
+"""Tests for mango.analytics.correlation — cross-asset correlation matrix."""
 
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
 
-from terminalq.analytics import correlation
-from terminalq.providers.crypto_analytics import _daily_returns, _pearson
+from mango.analytics import correlation
+from mango.providers.crypto_analytics import _daily_returns, _pearson
 
 
 @pytest.fixture(autouse=True)
@@ -44,7 +44,7 @@ async def test_correlation_matrix_custom_symbols():
     """Custom symbols produce a full pairwise matrix with notable pairs."""
     data_map = {"AAA": _AAA, "BBB": _BBB, "CCC": _CCC}
 
-    with patch("terminalq.analytics.correlation.yfinance.Ticker", side_effect=_ticker_factory(data_map)):
+    with patch("mango.analytics.correlation.yfinance.Ticker", side_effect=_ticker_factory(data_map)):
         result = await correlation.get_cross_asset_correlation_matrix("AAA,BBB,CCC")
 
     assert result["source"] == "yahoo_finance (computed)"
@@ -75,7 +75,7 @@ async def test_correlation_matrix_excludes_failed_ticker():
     """Tickers with no/insufficient price data are excluded from the matrix."""
     data_map = {"AAA": _AAA, "BBB": _BBB}  # EMPTY intentionally missing -> empty DataFrame
 
-    with patch("terminalq.analytics.correlation.yfinance.Ticker", side_effect=_ticker_factory(data_map)):
+    with patch("mango.analytics.correlation.yfinance.Ticker", side_effect=_ticker_factory(data_map)):
         result = await correlation.get_cross_asset_correlation_matrix("AAA,BBB,EMPTY")
 
     assert set(result["tickers"]) == {"AAA", "BBB"}
@@ -85,7 +85,7 @@ async def test_correlation_matrix_excludes_failed_ticker():
 
 async def test_correlation_matrix_insufficient_data():
     """All tickers failing returns an error dict."""
-    with patch("terminalq.analytics.correlation.yfinance.Ticker", side_effect=_ticker_factory({})):
+    with patch("mango.analytics.correlation.yfinance.Ticker", side_effect=_ticker_factory({})):
         result = await correlation.get_cross_asset_correlation_matrix("AAA,BBB")
 
     assert "error" in result
@@ -102,7 +102,7 @@ async def test_correlation_matrix_default_universe():
     """Empty symbols arg uses the default cross-asset universe."""
     data_map = {ticker: _AAA for ticker in correlation.DEFAULT_UNIVERSE}
 
-    with patch("terminalq.analytics.correlation.yfinance.Ticker", side_effect=_ticker_factory(data_map)):
+    with patch("mango.analytics.correlation.yfinance.Ticker", side_effect=_ticker_factory(data_map)):
         result = await correlation.get_cross_asset_correlation_matrix("")
 
     assert set(result["tickers"]) == set(correlation.DEFAULT_UNIVERSE)
@@ -112,7 +112,7 @@ async def test_correlation_matrix_cache_hit():
     """Second call with the same symbols uses the cached result."""
     data_map = {"AAA": _AAA, "BBB": _BBB, "CCC": _CCC}
 
-    with patch("terminalq.analytics.correlation.yfinance.Ticker", side_effect=_ticker_factory(data_map)) as mock_cls:
+    with patch("mango.analytics.correlation.yfinance.Ticker", side_effect=_ticker_factory(data_map)) as mock_cls:
         first = await correlation.get_cross_asset_correlation_matrix("AAA,BBB,CCC")
         second = await correlation.get_cross_asset_correlation_matrix("AAA,BBB,CCC")
 
