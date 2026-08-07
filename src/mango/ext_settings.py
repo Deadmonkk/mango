@@ -20,6 +20,8 @@ authoritative.
 """
 
 import os
+
+from mango.core.env import load_env
 from pathlib import Path
 
 try:  # optional: this pack must import with no host project present
@@ -55,6 +57,13 @@ REPORTS_DIR = Path(
     os.environ.get("REPORTS_DIR")
     or _from_upstream("REPORTS_DIR", PORTFOLIO_DIR / "reports")
 ).expanduser()
+
+# Resolved here rather than inherited. Both were previously reaching the host
+# through the module __getattr__ fallback, which meant the package could not
+# stand alone: with no host present the import failed outright.
+load_env()  # keys live in ~/.env; nothing else has loaded it at import time
+FRED_API_KEY = os.environ.get("FRED_API_KEY", "")
+CACHE_TTL_ECONOMIC = _from_upstream("CACHE_TTL_ECONOMIC", 3600)  # 1h; FRED series are daily-or-slower
 
 # Defined by this pack. Each may be overridden upstream; see _from_upstream.
 AAII_SPREAD_EXTREME_PP = _from_upstream("AAII_SPREAD_EXTREME_PP", 10.0)
