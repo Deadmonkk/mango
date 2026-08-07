@@ -275,10 +275,10 @@ async def test_get_economic_dashboard_shape_with_one_failing_series(monkeypatch)
 async def test_get_economic_dashboard_change_arithmetic_and_none_cases(monkeypatch):
     # Arrange
     async def fake_get_series(alias: str, limit: int = 10) -> dict:
-        if alias == "gdp":
+        if alias == "real_gdp":
             # Only one observation -> no previous value -> change is None.
             return {
-                "series_id": "GDP",
+                "series_id": "GDPC1",
                 "observations": [{"date": "2026-08-05", "value": 5.0}],
                 "title": "",
                 "units": "",
@@ -310,9 +310,13 @@ async def test_get_economic_dashboard_change_arithmetic_and_none_cases(monkeypat
 
     # Assert
     indicators = result["indicators"]
-    assert indicators["gdp"]["latest_value"] == 5.0
-    assert indicators["gdp"]["previous_value"] is None
-    assert indicators["gdp"]["change"] is None
+    # The dashboard fetches real_gdp (GDPC1), not nominal gdp (GDP), since
+    # 2026-08-07 — the report discusses growth over time. Both aliases still
+    # resolve (see test_resolve_series_id_distinguishes_gdp_and_real_gdp);
+    # only which one the dashboard requests changed.
+    assert indicators["real_gdp"]["latest_value"] == 5.0
+    assert indicators["real_gdp"]["previous_value"] is None
+    assert indicators["real_gdp"]["change"] is None
     assert indicators["cpi"]["latest_value"] is None
     assert indicators["cpi"]["change"] is None
     assert indicators["fed_funds"]["change"] == 0.5

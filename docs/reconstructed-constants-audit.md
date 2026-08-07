@@ -23,6 +23,32 @@
 > findings and the duplicate-definition finding stand on their own, since those
 > were judged from values and usage rather than from absence of usage.
 
+> ## Resolved 2026-08-07 — `CLAIMS_DETERIORATION_PCT` is correct as-is
+>
+> This audit flagged `CLAIMS_DETERIORATION_PCT = 10.0` as SUSPICIOUS because it
+> is 20x the Sahm rule's 0.50pp. That comparison was misleading: the two measure
+> different things on different scales — the Sahm rule tracks a rise in the
+> *unemployment rate* in percentage points, this tracks a *percent change* in
+> weekly jobless claims.
+>
+> Backtested against its own history (1,983 weeks, ~38 years of `ICSA`, using
+> the same 4-week vs 13-weeks-prior calculation the code performs):
+>
+> | | |
+> |---|---|
+> | Weeks the threshold would have fired | **142 (7.2%)** |
+> | Largest reading on record | +2,296% (2026-04-18 equivalent week, 2020 COVID spike) |
+> | Reading on 2026-08-07 | −2.1% (claims falling) |
+>
+> Firing in roughly 1 week in 14 is frequent enough to be a live signal and rare
+> enough not to be noise. **Decision: keep 10.0.** It is now an evidence-backed
+> parameter rather than a reconstructed guess. Revisit only as part of a broader
+> calibration across all six recession indicators.
+>
+> The other two SUSPICIOUS entries (`CORRELATION_REGIME_SHIFT_DELTA = 0.30`,
+> `SKEW_ELEVATED_THRESHOLD = 145`) are lower-stakes and remain unchanged pending
+> the same kind of backtest.
+
 ## Summary
 
 73 constants are defined in `ext_settings.py`. Of these:

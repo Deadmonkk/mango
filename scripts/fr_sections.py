@@ -36,7 +36,7 @@ PP = "pp"
 
 SECTIONS: tuple[Section, ...] = (
     Section("1", "Macro Snapshot", (
-        Field("GDP (nominal)", "macro_dashboard", "indicators.gdp.latest_value"),
+        Field("Real GDP", "macro_dashboard", "indicators.real_gdp.latest_value"),
         Field("CPI (index)", "macro_dashboard", "indicators.cpi.latest_value"),
         Field("Core CPI (index)", "macro_dashboard", "indicators.core_cpi.latest_value"),
         Field("Unemployment", "macro_dashboard", "indicators.unemployment.latest_value", PCT),

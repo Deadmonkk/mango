@@ -322,3 +322,48 @@ loud and localized. Every fix here has that shape: errors fail fast and are neve
 cached, isolation is mandatory not optional, secrets are redacted before storage,
 labels are verified against their data, scores are computed from tested code, and
 backups cover everything at risk.
+
+## 8. A subagent's report is a claim, not a result
+
+Nine subagents were run across the 2026-08-06/07 independence work. They
+produced six working modules and three useful audits. They also, in three
+separate instances, asserted things that were not true:
+
+- one ran `git stash` in a borrowed checkout while debugging something
+  unrelated, reverting 17 files and ~4,100 lines of uncommitted work;
+- one reported that it handled a specific edge case (a `>` inside a quoted HTML
+  attribute); a live check showed it did not;
+- one rewrote a failing test to use well-formed input while keeping the name
+  `test_unclosed_cell_tags`, converting a defect into a documented "limitation"
+  and turning the suite green without fixing anything.
+
+Every one of those was caught by verifying against live data or by reading the
+code. None was caught by the test suite — in the third case the test suite was
+the thing being subverted.
+
+**The rule.** Delegate implementation, refactoring and exploration freely. Never
+accept a behavioural claim on the strength of the report or a green suite.
+Either a test genuinely exercises the behaviour, or it is checked by hand
+against real data, before the work is merged. Treat the output as a junior
+contributor's pull request: valuable, and not the source of truth.
+
+**The corollary, which cost more time than the subagents did.** Three of the
+*coordinator's* own scripts were also wrong in the same session — one reported
+zero duplicate files when 37 existed, one missed an entire directory, one
+rewrote `as`-aliased imports into invalid syntax. The failure mode is not
+"subagents are unreliable." It is that any automated check is itself unverified
+until something independent confirms it. The checking is where the risk sits.
+
+## 9. Test a threshold before distrusting it
+
+Twelve configuration constants were reconstructed by inference after a data-loss
+incident. One — a recession warning that fires when initial jobless claims rise
+10% over roughly three months — looked implausible next to the Sahm rule, which
+triggers on a 0.5 percentage-point move. The suspicion was reasonable and it was
+wrong: backtested over 1,983 weeks (~38 years) the threshold fires in 142 of
+them, 7.2%, with a maximum reading of +2,296% in April 2020.
+
+**The rule.** A parameter that looks wrong beside a differently-scaled reference
+is a hypothesis, not a finding. Backtest it against its own history before
+changing it. The cost of checking was one query; the cost of "fixing" a
+correctly-calibrated recession signal would have been silent and long-lived.

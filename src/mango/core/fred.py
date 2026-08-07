@@ -87,7 +87,10 @@ SERIES_MAP: dict[str, str] = {
 
 # The 11 series shown on the general economic dashboard.
 _DASHBOARD_ALIASES = [
-    "gdp",
+    # Real, not nominal. The report discusses growth over time, which needs
+    # inflation stripped out. Changed 2026-08-07 — before that it fetched
+    # nominal GDP while labelling it "Real GDP".
+    "real_gdp",
     "cpi",
     "core_cpi",
     "fed_funds",
