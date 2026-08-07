@@ -47,6 +47,15 @@ a definition.
   A spread is the difference between two rates, so 2.75 means 275 basis points,
   not 2.75%. An audit briefly changed these to `%`; that was reverted.
 
+### Dependencies — deliberate pins
+
+- **`mcp[cli]` is pinned `<2` deliberately, pending a migration to MCP 2.x.**
+  Not accidental caution: 2.x moved `mcp.server.fastmcp`, which the host's
+  `server.py` imports, so an unbounded resolve took 2.0.0 and the server would
+  not start. The choice is to stay on 1.x until the migration is scheduled,
+  rather than to test against 2.x continuously. Anyone removing this bound
+  should expect to update the server's imports at the same time.
+
 ### Added
 
 - Contract tests for the collector's source map. It fetches all 63 sources and
