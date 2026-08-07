@@ -16,7 +16,7 @@ from terminalq.mango.logging import log
 from terminalq.mango import cache
 from terminalq.analytics import percentiles
 from terminalq.ext_settings import CACHE_TTL_VALUATION, ERP_THIN_CUSHION_PP
-from terminalq.providers import _html
+from terminalq.mango import html as _html
 from terminalq.mango import fred
 
 CAPE_URL = "https://www.multpl.com/shiller-pe/table/by-month"
