@@ -25,14 +25,24 @@ patch restored every one of them. Two lessons were folded back in:
 
 ## Applying
 
+Mango is standalone and needs none of this to run on its own — `pip install
+mango` and it works. This section applies only when driving the host project's
+MCP server, whose own modules call into Mango.
+
 ```bash
 git clone https://github.com/fakoli/terminalq.git
 cd terminalq
-cp -r /path/to/Mango/src/terminalq/*  src/terminalq/
-cp -r /path/to/Mango/tests/*          tests/
-cp -r /path/to/Mango/scripts          .
+# Mango installs as its own package now; it is no longer copied over the
+# host's tree. The host imports `mango.*` alongside its own `terminalq.*`.
+cp -r /path/to/Mango/src/mango  src/mango
+cp -r /path/to/Mango/tests/.    tests/
+cp -r /path/to/Mango/scripts/.  scripts/
 git apply /path/to/Mango/wiring/upstream-wiring.patch
 ```
+
+The patch repoints the host's own modules at `mango.*` — its `server.py`,
+`cache.py`, `coingecko.py`, `historical.py` and `finnhub.py`, plus the tests
+that patch those targets by string.
 
 Tests that depend on this wiring are skip-guarded (`tests/_upstream_wiring.py`), so
 the suite passes either way — it simply reports fewer integration tests without it.

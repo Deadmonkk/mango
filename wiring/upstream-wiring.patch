@@ -275,14 +275,14 @@ index 8f7d3c5..6fedd8c 100644
  
  ## When Not to Use
 diff --git a/src/terminalq/cache.py b/src/terminalq/cache.py
-index 7b7cb6d..bdfa3f0 100644
+index 7b7cb6d..6677d3f 100644
 --- a/src/terminalq/cache.py
 +++ b/src/terminalq/cache.py
 @@ -4,6 +4,7 @@ import json
  import time
  from pathlib import Path
  
-+from terminalq.cache_guard import should_cache
++from mango.cache_guard import should_cache
  from terminalq.config import CACHE_DIR
  from terminalq.logging_config import log
  
@@ -303,7 +303,7 @@ index 7b7cb6d..bdfa3f0 100644
          CACHE_DIR.mkdir(parents=True, exist_ok=True)
          data = {
 diff --git a/src/terminalq/providers/coingecko.py b/src/terminalq/providers/coingecko.py
-index a850c40..b6eac3d 100644
+index a850c40..6569a63 100644
 --- a/src/terminalq/providers/coingecko.py
 +++ b/src/terminalq/providers/coingecko.py
 @@ -1,10 +1,28 @@
@@ -316,7 +316,7 @@ index a850c40..b6eac3d 100644
  
  from terminalq import cache
 -from terminalq.config import CACHE_TTL_CRYPTO, COINGECKO_RATE_LIMIT
-+from terminalq.ext_settings import (
++from mango.ext_settings import (
 +    CACHE_TTL_CRYPTO,
 +    CACHE_TTL_CRYPTO_DEEP,
 +    CACHE_TTL_CRYPTO_DERIVATIVES,
@@ -1429,7 +1429,7 @@ index c26120e..c811621 100644
  
      # Parse events from the response
 diff --git a/src/terminalq/providers/historical.py b/src/terminalq/providers/historical.py
-index 993b615..fbbea29 100644
+index 993b615..ec01c34 100644
 --- a/src/terminalq/providers/historical.py
 +++ b/src/terminalq/providers/historical.py
 @@ -7,9 +7,8 @@ yfinance fails or returns empty data.
@@ -1439,7 +1439,7 @@ index 993b615..fbbea29 100644
 -import yfinance
 -
  from terminalq import cache
-+from terminalq._lazy_yfinance import yfinance
++from mango._lazy_yfinance import yfinance
  from terminalq.config import CACHE_TTL_DIVIDENDS, CACHE_TTL_HISTORY, POLYGON_API_KEY
  from terminalq.logging_config import log
  
@@ -3010,88 +3010,87 @@ index 62c8699..77acc92 100644
 +    assert result["transactions"] == []
 +    assert result["summary"]["net_shares"] == 0
 diff --git a/tests/test_fred.py b/tests/test_fred.py
-index 34f23f1..f446b92 100644
+index 34f23f1..31a2db0 100644
 --- a/tests/test_fred.py
 +++ b/tests/test_fred.py
-@@ -5,7 +5,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
+@@ -5,6 +5,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
  import httpx
  import pytest
  
--from terminalq.providers import fred
-+from terminalq.analytics import fred_archive
-+from terminalq.providers import fred, fred_ext
++from mango.analytics import fred_archive
++from mango.providers import fred_ext
+ from terminalq.providers import fred
  
  
- @pytest.fixture(autouse=True)
-@@ -32,7 +33,7 @@ def _mock_response(json_data, status_code=200):
+@@ -32,7 +34,7 @@ def _mock_response(json_data, status_code=200):
  
  async def test_get_series(monkeypatch):
      """get_series returns structured observations."""
 -    monkeypatch.setattr("terminalq.providers.fred.FRED_API_KEY", "test_key_123")
-+    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "test_key_123")
++    monkeypatch.setattr("mango.providers.fred_ext.FRED_API_KEY", "test_key_123")
  
      obs_data = {
          "observations": [
-@@ -53,7 +54,7 @@ async def test_get_series(monkeypatch):
+@@ -53,7 +55,7 @@ async def test_get_series(monkeypatch):
      mock_client.__aenter__ = AsyncMock(return_value=mock_client)
      mock_client.__aexit__ = AsyncMock(return_value=False)
  
 -    with patch("terminalq.providers.fred.httpx.AsyncClient", return_value=mock_client):
-+    with patch("terminalq.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
++    with patch("mango.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
          result = await fred.get_series("CPIAUCSL", limit=2)
  
      assert result["series_id"] == "CPIAUCSL"
-@@ -65,7 +66,7 @@ async def test_get_series(monkeypatch):
+@@ -65,7 +67,7 @@ async def test_get_series(monkeypatch):
  
  async def test_alias_resolution(monkeypatch):
      """Human-friendly aliases resolve to FRED series IDs."""
 -    monkeypatch.setattr("terminalq.providers.fred.FRED_API_KEY", "test_key_123")
-+    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "test_key_123")
++    monkeypatch.setattr("mango.providers.fred_ext.FRED_API_KEY", "test_key_123")
  
      obs_data = {"observations": [{"date": "2026-01-01", "value": "27000"}]}
      info_data = {"seriess": [{"title": "GDP", "frequency": "Quarterly", "units": "Billions of Dollars"}]}
-@@ -80,7 +81,7 @@ async def test_alias_resolution(monkeypatch):
+@@ -80,7 +82,7 @@ async def test_alias_resolution(monkeypatch):
      mock_client.__aenter__ = AsyncMock(return_value=mock_client)
      mock_client.__aexit__ = AsyncMock(return_value=False)
  
 -    with patch("terminalq.providers.fred.httpx.AsyncClient", return_value=mock_client):
-+    with patch("terminalq.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
++    with patch("mango.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
          result = await fred.get_series("gdp", limit=1)
  
      # "gdp" should resolve to "GDP" series ID
-@@ -98,7 +99,7 @@ async def test_missing_key(monkeypatch):
+@@ -98,7 +100,7 @@ async def test_missing_key(monkeypatch):
  
  async def test_dashboard(monkeypatch):
      """Dashboard fetches multiple indicators and aggregates them."""
 -    monkeypatch.setattr("terminalq.providers.fred.FRED_API_KEY", "test_key_123")
-+    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "test_key_123")
++    monkeypatch.setattr("mango.providers.fred_ext.FRED_API_KEY", "test_key_123")
  
      obs_data = {
          "observations": [
-@@ -118,7 +119,7 @@ async def test_dashboard(monkeypatch):
+@@ -118,7 +120,7 @@ async def test_dashboard(monkeypatch):
      mock_client.__aenter__ = AsyncMock(return_value=mock_client)
      mock_client.__aexit__ = AsyncMock(return_value=False)
  
 -    with patch("terminalq.providers.fred.httpx.AsyncClient", return_value=mock_client):
-+    with patch("terminalq.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
++    with patch("mango.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
          result = await fred.get_economic_dashboard()
  
      assert "indicators" in result
-@@ -135,7 +136,7 @@ async def test_dashboard(monkeypatch):
+@@ -135,7 +137,7 @@ async def test_dashboard(monkeypatch):
  
  async def test_dot_value_skip(monkeypatch):
      """Observations with value '.' are skipped."""
 -    monkeypatch.setattr("terminalq.providers.fred.FRED_API_KEY", "test_key_123")
-+    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "test_key_123")
++    monkeypatch.setattr("mango.providers.fred_ext.FRED_API_KEY", "test_key_123")
  
      obs_data = {
          "observations": [
-@@ -156,10 +157,222 @@ async def test_dot_value_skip(monkeypatch):
+@@ -156,10 +158,222 @@ async def test_dot_value_skip(monkeypatch):
      mock_client.__aenter__ = AsyncMock(return_value=mock_client)
      mock_client.__aexit__ = AsyncMock(return_value=False)
  
 -    with patch("terminalq.providers.fred.httpx.AsyncClient", return_value=mock_client):
-+    with patch("terminalq.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
++    with patch("mango.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
          result = await fred.get_series("DFF", limit=3)
  
      # Only 1 observation should remain (the two "." entries skipped)
@@ -3102,7 +3101,7 @@ index 34f23f1..f446b92 100644
 +
 +async def test_get_liquidity_dashboard(monkeypatch):
 +    """Liquidity dashboard fetches Fed balance sheet, RRP, TGA and computes net liquidity."""
-+    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "test_key_123")
++    monkeypatch.setattr("mango.providers.fred_ext.FRED_API_KEY", "test_key_123")
 +
 +    info_data = {"seriess": [{"title": "Test Series", "frequency": "Weekly", "units": "Billions of Dollars"}]}
 +
@@ -3124,7 +3123,7 @@ index 34f23f1..f446b92 100644
 +    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
 +    mock_client.__aexit__ = AsyncMock(return_value=False)
 +
-+    with patch("terminalq.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
++    with patch("mango.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
 +        result = await fred_ext.get_liquidity_dashboard()
 +
 +    assert result["source"] == "fred"
@@ -3139,7 +3138,7 @@ index 34f23f1..f446b92 100644
 +
 +async def test_get_liquidity_dashboard_missing_key(monkeypatch):
 +    """Liquidity dashboard returns an error dict when FRED_API_KEY is missing."""
-+    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "")
++    monkeypatch.setattr("mango.providers.fred_ext.FRED_API_KEY", "")
 +
 +    result = await fred_ext.get_liquidity_dashboard()
 +    assert "error" in result
@@ -3148,7 +3147,7 @@ index 34f23f1..f446b92 100644
 +
 +async def test_get_rates_dashboard(monkeypatch):
 +    """Rates dashboard fetches yields, real yields, and breakeven inflation."""
-+    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "test_key_123")
++    monkeypatch.setattr("mango.providers.fred_ext.FRED_API_KEY", "test_key_123")
 +
 +    obs_data = {
 +        "observations": [
@@ -3168,7 +3167,7 @@ index 34f23f1..f446b92 100644
 +    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
 +    mock_client.__aexit__ = AsyncMock(return_value=False)
 +
-+    with patch("terminalq.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
++    with patch("mango.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
 +        result = await fred_ext.get_rates_dashboard()
 +
 +    assert result["source"] == "fred"
@@ -3181,7 +3180,7 @@ index 34f23f1..f446b92 100644
 +
 +async def test_get_rates_dashboard_missing_key(monkeypatch):
 +    """Rates dashboard returns an error dict when FRED_API_KEY is missing."""
-+    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "")
++    monkeypatch.setattr("mango.providers.fred_ext.FRED_API_KEY", "")
 +
 +    result = await fred_ext.get_rates_dashboard()
 +    assert "error" in result
@@ -3202,7 +3201,7 @@ index 34f23f1..f446b92 100644
 +
 +async def test_consumer_health_reports_consumer_delinquency(monkeypatch):
 +    """Consumer health dashboard uses the renamed consumer_delinquency indicator."""
-+    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "test_key_123")
++    monkeypatch.setattr("mango.providers.fred_ext.FRED_API_KEY", "test_key_123")
 +
 +    obs_data = {
 +        "observations": [
@@ -3222,7 +3221,7 @@ index 34f23f1..f446b92 100644
 +    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
 +    mock_client.__aexit__ = AsyncMock(return_value=False)
 +
-+    with patch("terminalq.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
++    with patch("mango.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
 +        result = await fred_ext.get_consumer_health_dashboard()
 +
 +    assert "consumer_delinquency" in result["indicators"]
@@ -3231,7 +3230,7 @@ index 34f23f1..f446b92 100644
 +
 +async def test_commodities_gold_from_yahoo(monkeypatch):
 +    """Commodities dashboard sources gold from Yahoo (FRED series discontinued)."""
-+    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "test_key_123")
++    monkeypatch.setattr("mango.providers.fred_ext.FRED_API_KEY", "test_key_123")
 +
 +    obs_data = {
 +        "observations": [
@@ -3263,9 +3262,9 @@ index 34f23f1..f446b92 100644
 +    }
 +
 +    with (
-+        patch("terminalq.providers.fred_ext.httpx.AsyncClient", return_value=mock_client),
++        patch("mango.providers.fred_ext.httpx.AsyncClient", return_value=mock_client),
 +        patch(
-+            "terminalq.providers.market_data.fetch_gold_dashboard_entry",
++            "mango.providers.market_data.fetch_gold_dashboard_entry",
 +            new=AsyncMock(return_value=gold_entry),
 +        ),
 +    ):
@@ -3288,7 +3287,7 @@ index 34f23f1..f446b92 100644
 +    """A restricted-history series (e.g. ICE BofA spreads) should return the
 +    permanently-archived earlier history merged with today's live fetch,
 +    not just whatever narrow window the live API currently serves."""
-+    monkeypatch.setattr("terminalq.providers.fred_ext.FRED_API_KEY", "test_key_123")
++    monkeypatch.setattr("mango.providers.fred_ext.FRED_API_KEY", "test_key_123")
 +
 +    seed = {
 +        "series_id": "BAMLH0A0HYM2",
@@ -3302,7 +3301,7 @@ index 34f23f1..f446b92 100644
 +    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
 +    mock_client.__aexit__ = AsyncMock(return_value=False)
 +
-+    with patch("terminalq.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
++    with patch("mango.providers.fred_ext.httpx.AsyncClient", return_value=mock_client):
 +        result = await fred_ext.get_series_history("BAMLH0A0HYM2")
 +
 +    assert result["start_date"] == "1996-12-31"
