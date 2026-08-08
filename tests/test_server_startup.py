@@ -22,9 +22,8 @@ There are progressively stronger levels of confidence, and each costs more:
 Unit tests give (1) for libraries. These give (1)-(3) for the entry points
 someone actually executes. (4) belongs to live verification, not CI.
 
-The MCP server is part of the HOST project, not this package, so every test
-here skips cleanly when no host is present — which is the normal case in this
-package's own CI.
+The server is part of this package, so nothing here skips: a failure to start
+is a real failure, not an absent-host condition.
 """
 
 from __future__ import annotations
@@ -32,37 +31,23 @@ from __future__ import annotations
 import pytest
 
 
-def _load_host_server():
-    """Import the host's server, distinguishing 'absent' from 'broken'.
+def _load_server():
+    """Import Mango's own server.
 
-    `importorskip` cannot tell those apart, and conflating them defeats the
-    point of this file: when the mcp 2.x breakage was reintroduced to check
-    these tests, they SKIPPED instead of failing — a silent pass for the exact
-    bug they exist to catch.
-
-    So: no host package at all is a legitimate skip (this package's own CI).
-    A host that is present but whose server will not import is a failure.
+    This used to guard a host project's server and skip when absent. The host
+    was removed on 2026-08-07; Mango ships its own, so an import failure here is
+    a real failure, never a skip.
     """
-    try:
-        import terminalq  # noqa: F401
-    except ImportError:
-        pytest.skip("no host project present; the MCP server is not part of this package")
-    try:
-        import terminalq.server as host_server
-    except Exception as exc:  # ImportError, but a bad dependency can raise anything
-        pytest.fail(
-            f"the host is installed but its server will not import: {exc!r}. "
-            "This is what a broken dependency pin looks like — the server would "
-            "fail to start."
-        )
-    return host_server
+    import mango.server as mango_server
+
+    return mango_server
 
 
-server = _load_host_server()
+server = _load_server()
 
 # The count moves as tools are added; this is a floor guarding against a
 # collapse (an import failure swallowing a whole provider group), not a spec.
-MINIMUM_EXPECTED_TOOLS = 60
+MINIMUM_EXPECTED_TOOLS = 80  # 88 registered as of the migration
 
 # Tools backed by modules this package owns. If the host's imports of `mango.*`
 # ever break, these disappear while the host's own tools stay — a partial
@@ -76,14 +61,16 @@ OWNED_BACKED_TOOLS = (
 
 
 def _registered_tool_names() -> set[str]:
-    """Tool names the server module exposes, however its framework stores them."""
-    names = {n for n in dir(server) if n.startswith("terminalq_")}
-    if names:
-        return names
-    app = getattr(server, "mcp", None) or getattr(server, "app", None)
-    registry = getattr(app, "_tool_manager", None)
-    tools = getattr(registry, "_tools", {}) if registry else {}
-    return set(tools)
+    """Tool names the server exposes. Importing the tool modules registers them."""
+    from mango.server import (  # noqa: F401
+        tools_crypto,
+        tools_macro,
+        tools_market,
+        tools_portfolio,
+        tools_reports,
+    )
+
+    return set(server.mcp._tool_manager._tools)
 
 
 class TestServerStarts:
@@ -93,7 +80,7 @@ class TestServerStarts:
         assert server is not None
 
     def test_entry_point_is_callable(self) -> None:
-        # Level 2, cheaply: `python -m terminalq` resolves to this.
+        # Level 2, cheaply: `python -m mango` resolves to this.
         assert callable(getattr(server, "main", None)), "server.main() is missing"
 
 
