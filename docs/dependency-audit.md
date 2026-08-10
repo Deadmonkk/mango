@@ -1,7 +1,7 @@
 # Mango Dependency Audit
 
 **Date:** 2026-08-06  
-**Scope:** `/Users/sulu/Projects/terminalq-extensions/src/` and `scripts/`  
+**Scope:** `src/` and `scripts/`  
 **Status:** READ-ONLY analysis
 
 ---
@@ -152,11 +152,11 @@ The following Mango infrastructure is **fully independent** and does NOT import 
 
 ## Ownership verification method
 
-**Owned classification:** Target module exists at `/Users/sulu/Projects/terminalq-extensions/src/terminalq/<module_path>.py`  
+**Owned classification:** Target module exists at `src/mango/<module_path>.py`  
 **Upstream classification:** Target module does NOT exist in extensions repo; must be fetched from third-party code
 
 Verified via:
-- Directory listing of `/Users/sulu/Projects/terminalq-extensions/src/terminalq/` and subdirectories
+- Directory listing of `src/mango/` and subdirectories
 - No files read from either repository (existence checks only)
 - No git commands executed
 

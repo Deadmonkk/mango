@@ -32,9 +32,21 @@ Four lessons learned the hard way, now embedded as rules:
 
 ## Installing
 
+Mango needs **Python 3.11+** and [uv](https://docs.astral.sh/uv/). If you don't
+have uv:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh    # macOS / Linux
+# or: brew install uv
+# or: pipx install uv
+```
+
+Then:
+
 ```bash
 git clone https://github.com/Deadmonkk/mango.git
-cd mango && uv sync
+cd mango
+uv sync                       # add --extra dev if you intend to run the tests
 ```
 
 Then register it with Claude Code by adding this to `~/.claude.json` under `mcpServers`:
@@ -60,6 +72,36 @@ uv run python -m mango   # logs: "Mango MCP server starting with 88 tools"
 
 The repo also ships 6 skills and 12 slash commands under `skills/` and `commands/`.
 
+## API keys
+
+**Mango works with no keys at all.** Crypto, equities, commodities, climate and
+web search all run keyless. Keys unlock specific families of tools, and every
+tool that needs one says so in its error rather than failing silently:
+
+| Key | Unlocks | Cost |
+|---|---|---|
+| `FRED_API_KEY` | Macro, rates, cycle position, economic indicators, event scenarios — the largest group | Free — [get one](https://fred.stlouisfed.org/docs/api/api_key.html) |
+| `FINNHUB_API_KEY` | Company fundamentals and the stock screener | Free tier — [register](https://finnhub.io/register) |
+| `BRAVE_API_KEY` | Higher-quality web search. Without it, search falls back to DuckDuckGo, which is keyless and always available | Free tier |
+| `COINGECKO_API_KEY`, `POLYGON_API_KEY` | Higher rate limits only; nothing new | Optional |
+
+### Where credentials go
+
+Put them in `~/.env` (override with `MANGO_ENV_FILE`):
+
+```bash
+FRED_API_KEY=your_key_here
+FINNHUB_API_KEY=your_key_here
+```
+
+**Never commit this file, or any key, anywhere in the repository.** `.env` is
+gitignored and the pre-commit hook blocks it, but the rule matters more than the
+guardrails: a key pushed to a public repo is compromised the moment it lands,
+and deleting the commit afterwards does not un-publish it. If that happens,
+rotate the key first and worry about history second.
+
+Environment variables work too, and take precedence over the file.
+
 ## Where your data lives
 
 **Nothing you create is stored in this repository.** Clone it, pull it, delete
@@ -68,10 +110,9 @@ that Mango creates on first run:
 
 ```
 ~/.mango/                       # override with MANGO_HOME
-├── portfolio-holdings.md       # your positions      (you write these)
-├── watchlist.md                # symbols you track   (you write these)
-├── rsu-schedule.md             # optional
-├── accounts.md                 # optional
+├── portfolio-holdings.md       # your positions    (you write, Mango reads)
+├── watchlist.md                # symbols you track (you write, Mango reads)
+├── rsu-schedule.md             # optional          (you write, Mango reads)
 ├── history/                    # predictions ledger, regime snapshots, FRED archive
 ├── cache/                      # provider responses (safe to delete)
 ├── audit/                      # a record of every tool call
@@ -82,10 +123,64 @@ Created with mode `700`, files `600` — it holds positions, an audit trail and
 cached responses from keyed APIs, and a default umask would leave those
 world-readable.
 
-The four markdown files are yours to write; Mango only reads them. Everything
-else it maintains. Deleting `cache/` is always safe. Deleting `history/` throws
-away your prediction track record, which is the one thing here that cannot be
-regenerated.
+The markdown files are yours to write; Mango only reads them. Everything else it
+maintains. Deleting `cache/` is always safe. Deleting `history/` throws away your
+prediction track record, which is the one thing here that cannot be regenerated.
+
+### The files you write
+
+All three are optional — skip any you don't need and the tools that use it will
+say so instead of failing. Working templates live in [`examples/`](examples);
+copy one, drop the `.example` from the name, and edit:
+
+```bash
+cp examples/portfolio-holdings.example.md ~/.mango/portfolio-holdings.md
+cp examples/watchlist.example.md          ~/.mango/watchlist.md
+cp examples/rsu-schedule.example.md       ~/.mango/rsu-schedule.md   # optional
+```
+
+**`portfolio-holdings.md`** — one `##` heading per account, each followed by a
+pipe table. There is no separate accounts file: your accounts *are* these
+headings. A parenthetical is stripped from the name, so `## Brokerage (1234)`
+groups as `Brokerage` and the number stays local.
+
+```markdown
+# Portfolio Holdings (as of Jan 1, 2026)
+
+## Brokerage (1234)
+
+| Symbol | Name                            | Shares | Cost Basis | Market Value | Unrealized G/L |
+|--------|---------------------------------|--------|------------|--------------|----------------|
+| VTI    | Vanguard Total Stock Market ETF | 100    | 25000.00   | 28500.00     | 3500.00        |
+```
+
+**`watchlist.md`** — one table. `Notes` is free text, never parsed.
+
+```markdown
+# Watchlist
+
+| Symbol | Name   | Notes             |
+|--------|--------|-------------------|
+| NVDA   | NVIDIA | AI infrastructure |
+```
+
+**`rsu-schedule.md`** — a `## <year> Grant: ...` heading per grant, each with a
+`### Vesting Schedule` table. Past-dated vests are excluded from upcoming totals.
+
+```markdown
+## 2027 Grant: $40,000 Initial Value
+
+### Vesting Schedule
+
+| Date       | Grant      | Pct of Grant | Est Value |
+|------------|------------|--------------|-----------|
+| 2027-03-15 | 2027 Grant | 50%          | $20,000   |
+```
+
+These files are hand-edited, so the parsers are forgiving: a missing or
+malformed file logs a warning and yields an empty result rather than raising.
+Extra columns are ignored, and a `CASH` row is counted in totals but excluded
+from symbol lookups.
 
 ### Relocating it
 

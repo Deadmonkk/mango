@@ -77,15 +77,15 @@ These rows use `PP = "pp"` for specific, legitimate reasons:
 
 ## Files Changed
 
-1. `/Users/sulu/Projects/terminalq-extensions/scripts/fr_sections.py` — 9 label and unit corrections
-2. `/Users/sulu/Projects/terminalq/scripts/fr_sections.py` — Mirrored copy (per audit workflow)
+1. `scripts/fr_sections.py` — 9 label and unit corrections
+2. `<host repo>/scripts/fr_sections.py` — Mirrored copy (per audit workflow)
 
 ---
 
 ## Tests
 
 ```bash
-cd /Users/sulu/Projects/terminalq && uv run pytest tests/test_fr_sections.py tests/test_fr_render.py -q
+cd <host repo> && uv run pytest tests/test_fr_sections.py tests/test_fr_render.py -q
 ```
 
 **Result:** `76 passed in 0.22s`
