@@ -22,9 +22,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 from datetime import date
 from pathlib import Path
+
+from mango.core import paths
 from typing import Any
 
 from mango.core.logging import get_logger
@@ -32,13 +33,9 @@ from mango.core.logging import get_logger
 log = get_logger("usage")
 
 USAGE_DIR_ENV_VAR = "MANGO_USAGE_DIR"
-DEFAULT_USAGE_DIR = Path.home() / ".mango" / "usage"
+DEFAULT_USAGE_DIR = paths.home() / paths.USAGE_SUBDIR
 
-USAGE_DIR: Path = (
-    Path(os.environ[USAGE_DIR_ENV_VAR]).expanduser()
-    if os.environ.get(USAGE_DIR_ENV_VAR)
-    else DEFAULT_USAGE_DIR
-)
+USAGE_DIR: Path = paths.resolve_dir(paths.USAGE_SUBDIR, USAGE_DIR_ENV_VAR)
 
 # One lock per provider. A single global lock would serialise unrelated
 # providers; no lock at all loses increments.

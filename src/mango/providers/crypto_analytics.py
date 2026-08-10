@@ -3,7 +3,8 @@
 import asyncio
 import json
 import math
-from pathlib import Path
+
+from mango.core import paths
 
 import httpx
 
@@ -577,7 +578,9 @@ _BTC_VALUATION_ENDPOINTS: dict[str, tuple[str, str]] = {
 }
 
 
-_LAST_GOOD_VALUATION_PATH = Path.home() / ".mango" / "history" / "btc_valuation_last_good.json"
+_LAST_GOOD_VALUATION_PATH = (
+    paths.resolve_dir(paths.HISTORY_SUBDIR, "MANGO_HISTORY_DIR") / "btc_valuation_last_good.json"
+)
 
 
 def _load_last_good_valuation() -> dict | None:
