@@ -1,7 +1,10 @@
 """Markdown parsers for the user's local portfolio data files.
 
-Reads three hand-maintained markdown files from `PORTFOLIO_DIR` (an env var,
-defaulting to `~/.mango/`):
+Reads three hand-maintained markdown files from the data directory — set by
+`MANGO_PORTFOLIO_DIR`, else `MANGO_HOME`, else `~/.mango/`. The older,
+unprefixed `PORTFOLIO_DIR` is still honoured but warns; see `mango.core.paths`
+for the full resolution order. The formats below are documented for users in
+the README:
 
   - `portfolio-holdings.md` — one or more `## <account>` sections, each
     holding a pipe table of positions.
