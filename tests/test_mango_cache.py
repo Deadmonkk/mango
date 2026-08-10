@@ -227,13 +227,17 @@ def test_cache_dir_env_var_is_honoured_at_import(monkeypatch, tmp_path):
         _reload_with_env(monkeypatch, None)
 
 
-def test_cache_dir_defaults_under_dot_terminalq_when_env_var_unset(monkeypatch):
+def test_cache_dir_defaults_under_dot_when_env_var_unset(monkeypatch):
     reloaded = _reload_with_env(monkeypatch, None)
 
     try:
-        assert reloaded.CACHE_DIR == Path.home() / ".terminalq" / "cache"
-        # It must never default inside the package's own source tree.
-        assert "terminalq-extensions" not in str(reloaded.CACHE_DIR)
+        assert reloaded.CACHE_DIR == Path.home() / ".mango" / "cache"
+        # It must never default inside the package's own source tree. Compare
+        # against the real source location rather than a directory-name
+        # substring: the repo has been renamed once already, and a substring
+        # check silently stops testing anything when the names converge.
+        source_root = Path(reloaded.__file__).resolve().parent.parent
+        assert source_root not in reloaded.CACHE_DIR.resolve().parents
     finally:
         _reload_with_env(monkeypatch, None)
 
