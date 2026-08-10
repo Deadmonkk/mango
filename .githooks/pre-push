@@ -1,0 +1,38 @@
+#!/bin/sh
+# Last gate before anything reaches the internet.
+#
+# pre-commit only sees the staged diff, so it cannot catch a secret that
+# entered in an earlier commit — via --no-verify, a rebase, a merge, or a
+# commit made before these hooks existed. This scans full history instead.
+#
+# History scanning is slower than the staged scan, which is the right trade at
+# push time: it runs once per push, not once per commit.
+#
+# Fails CLOSED, same as pre-commit.
+
+set -e
+
+GITLEAKS="${GITLEAKS_BIN:-$(command -v gitleaks || echo /opt/homebrew/bin/gitleaks)}"
+
+if [ ! -x "$GITLEAKS" ]; then
+    echo "pre-push: gitleaks not found at '$GITLEAKS'." >&2
+    echo "  install:  brew install gitleaks" >&2
+    exit 1
+fi
+
+echo "pre-push: scanning full history for secrets..." >&2
+
+if ! "$GITLEAKS" git --redact --no-banner --exit-code 1; then
+    echo "" >&2
+    echo "PUSH BLOCKED — gitleaks found a secret in this repository's history." >&2
+    echo "Findings are redacted; the value itself is not printed." >&2
+    echo "" >&2
+    echo "A secret in history is PUBLIC the moment this pushes, and deleting the" >&2
+    echo "commit afterwards does not undo it — clones and caches keep it." >&2
+    echo "" >&2
+    echo "  1. ROTATE the credential first. Always. Before anything else." >&2
+    echo "  2. Then rewrite history (git filter-repo) if you still want it gone." >&2
+    exit 1
+fi
+
+echo "pre-push: clean." >&2

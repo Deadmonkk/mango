@@ -4,13 +4,23 @@
 *.key
 *.pem
 
-# Private data (portfolio, holdings, audit trails, cached responses)
+# Private data (portfolio, holdings, audit trails, cached responses).
+# Deliberately UNANCHORED (no leading path): a pattern containing a slash only
+# matches that one location, so `reference/portfolio-holdings.md` did nothing
+# to stop a copy landing in the repo root or docs/. These match at any depth.
 data/
-reference/portfolio-holdings.md
-reference/rsu-schedule.md
-reference/accounts.md
-reference/watchlist.md
-reference/etf-classifications.md
+portfolio-holdings.md
+rsu-schedule.md
+accounts.md
+watchlist.md
+etf-classifications.md
+predictions.jsonl
+snapshots.jsonl
+*.jsonl.bak
+fr_raw_*.json
+fr_brief_*.md
+fr_digest_*.md
+eod_*.md
 
 # Generated reports and analysis output
 reports/

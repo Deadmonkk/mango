@@ -1,0 +1,58 @@
+# Gitleaks configuration for Mango.
+#
+# Two layers:
+#   1. The upstream default ruleset (AWS/GitHub/Slack/Stripe/OpenAI/PEM/JWT/...)
+#      via `useDefault`, so credential formats are covered without maintaining
+#      a list here.
+#   2. Path rules below for THIS project's private data. Those files hold no
+#      "secret" a pattern scanner would recognise — a holdings table is just
+#      markdown — so content scanning will never catch them. They are blocked
+#      by filename instead, which is the failure mode that actually happens:
+#      a copy landing somewhere .gitignore does not cover.
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "mango-private-data-file"
+description = "Private financial/personal data file — must never be committed"
+path = '''(^|/)(portfolio-holdings|watchlist|accounts|rsu-schedule|etf-classifications)\.md$'''
+
+[[rules]]
+id = "mango-ledger-file"
+description = "Prediction ledger or regime snapshots — must never be committed"
+path = '''(^|/)(predictions|snapshots)\.jsonl$'''
+
+[[rules]]
+id = "mango-report-artifact"
+description = "FR/EOD report artifact — may embed live keys in error strings"
+path = '''(^|/)(fr_raw_.*\.json|fr_brief_.*\.md|fr_digest_.*\.md|[^/]*-fr\.md|[^/]*-eod\.md)$'''
+
+[[rules]]
+id = "mango-env-file"
+description = "Environment/credential file — must never be committed"
+path = '''(^|/)\.env(\..*)?$'''
+
+[allowlist]
+description = "Known-safe credential-shaped text"
+
+# Placeholder values used by the test suite to exercise keyed code paths.
+# Deliberately matched by VALUE rather than by file: allowlisting the whole
+# test file would stop a real key pasted into it from ever being caught, and
+# tests are exactly where a real key gets pasted "just to check something".
+# These five findings are pre-existing in history (verified fake at the commit
+# that introduced them), and without this the push gate fails on every push —
+# which trains the habit of --no-verify and is worse than having no gate.
+regexes = [
+  '''(brave_|finnhub_|fred_)?test_key_[0-9]+''',
+]
+
+paths = [
+  # The redaction module and its tests must name credential env vars and carry
+  # realistic fixtures; that is the point of them.
+  '''src/mango/core/redact\.py''',
+  '''tests/test_mango_redact\.py''',
+  '''tests/test_mango_logging\.py''',
+  # Historical record of the host-era integration; audited, no live values.
+  '''wiring/upstream-wiring\.patch''',
+]

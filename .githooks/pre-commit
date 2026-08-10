@@ -1,0 +1,28 @@
+#!/bin/sh
+# Block a commit that stages a secret or a private data file.
+#
+# Fails CLOSED: if gitleaks is missing or errors, the commit is refused. A
+# scanner that silently skips is worse than none, because it is trusted.
+#
+# Scans only the staged diff, so it stays fast enough to run every time.
+
+set -e
+
+GITLEAKS="${GITLEAKS_BIN:-$(command -v gitleaks || echo /opt/homebrew/bin/gitleaks)}"
+
+if [ ! -x "$GITLEAKS" ]; then
+    echo "pre-commit: gitleaks not found at '$GITLEAKS'." >&2
+    echo "  install:  brew install gitleaks" >&2
+    echo "  bypass:   git commit --no-verify   (only if you are certain)" >&2
+    exit 1
+fi
+
+if ! "$GITLEAKS" git --staged --redact --no-banner --exit-code 1; then
+    echo "" >&2
+    echo "COMMIT BLOCKED — gitleaks found a secret or private data file above." >&2
+    echo "Findings are redacted; the value itself is not printed." >&2
+    echo "" >&2
+    echo "  false positive -> add an allowlist entry in .gitleaks.toml" >&2
+    echo "  real secret    -> unstage it, then ROTATE the credential" >&2
+    exit 1
+fi
