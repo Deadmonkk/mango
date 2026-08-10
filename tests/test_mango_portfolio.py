@@ -2,7 +2,7 @@
 
 All fixtures are synthetic (made-up tickers, round dollar amounts) written
 into `tmp_path` — never real holdings. `PORTFOLIO_DIR` is monkeypatched to
-`tmp_path` for every test so the module never touches `~/.terminalq/`.
+`tmp_path` for every test so the module never touches `~/.mango/`.
 """
 
 from __future__ import annotations
