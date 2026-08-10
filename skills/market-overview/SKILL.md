@@ -9,17 +9,17 @@ Use this skill when the user asks "how are markets doing," wants a cross-asset s
 
 ## Tool sequence
 
-1. `terminalq_get_market_overview()` — major index levels, YTD and 1-year returns. The frame for everything else.
-2. `terminalq_get_equity_sentiment()` — VIX term structure, SKEW, equal-weight vs. cap-weight breadth. Establishes the vol and breadth backdrop before anything else is read against it.
-3. `terminalq_get_sector_rotation()` — sector ETFs vs. SPY, 1/3/6-month, cyclical vs. defensive spread. Does leadership confirm or contradict the index-level read.
-4. `terminalq_get_retail_sentiment()` — AAII bull-bear spread and SPY put/call. The crowd read, useful as a contrarian check at extremes.
-5. `terminalq_get_dealer_gamma(symbol="SPY")` — net dealer gamma sign and the nearest call/put walls. Changes what the VIX level from step 2 actually means.
-6. `terminalq_get_rates_dashboard()` — yields, real yields, breakeven inflation.
-7. `terminalq_get_commodities()` — crude, gasoline, dollar index.
-8. `terminalq_get_crypto_market_overview()` and `terminalq_get_fear_greed(limit=7)` — total crypto market cap and sentiment, so the overview covers the full asset-class set, not equities alone.
-9. `terminalq_get_correlation_regime()` — recent vs. baseline cross-asset correlation. Tightening correlation across asset classes is a risk-off tell even when individual assets look calm.
-10. `terminalq_get_international_markets()` — optional, when the question is global rather than US-only.
-11. `terminalq_get_cot_report(market)` — optional, when positioning in a specific futures market (S&P, gold, etc.) is relevant to the question.
+1. `get_market_overview()` — major index levels, YTD and 1-year returns. The frame for everything else.
+2. `get_equity_sentiment()` — VIX term structure, SKEW, equal-weight vs. cap-weight breadth. Establishes the vol and breadth backdrop before anything else is read against it.
+3. `get_sector_rotation()` — sector ETFs vs. SPY, 1/3/6-month, cyclical vs. defensive spread. Does leadership confirm or contradict the index-level read.
+4. `get_retail_sentiment()` — AAII bull-bear spread and SPY put/call. The crowd read, useful as a contrarian check at extremes.
+5. `get_dealer_gamma(symbol="SPY")` — net dealer gamma sign and the nearest call/put walls. Changes what the VIX level from step 2 actually means.
+6. `get_rates_dashboard()` — yields, real yields, breakeven inflation.
+7. `get_commodities()` — crude, gasoline, dollar index.
+8. `get_crypto_market_overview()` and `get_fear_greed(limit=7)` — total crypto market cap and sentiment, so the overview covers the full asset-class set, not equities alone.
+9. `get_correlation_regime()` — recent vs. baseline cross-asset correlation. Tightening correlation across asset classes is a risk-off tell even when individual assets look calm.
+10. `get_international_markets()` — optional, when the question is global rather than US-only.
+11. `get_cot_report(market)` — optional, when positioning in a specific futures market (S&P, gold, etc.) is relevant to the question.
 
 ## Interpreting the output
 

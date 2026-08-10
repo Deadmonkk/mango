@@ -7,7 +7,7 @@ arguments:
     required: false
 ---
 
-Call `terminalq_get_event_scenarios` (days = "$ARGUMENTS" if a number was given, else 7).
+Call `get_event_scenarios` (days = "$ARGUMENTS" if a number was given, else 7).
 
 For each upcoming event, write its **reaction function** as a short block:
 

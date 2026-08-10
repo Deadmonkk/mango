@@ -7,7 +7,7 @@ records clean structured snapshots directly — this only seeds the back-history
 
 Run once:  python -m mango.backfill "/path/to/reports"
 
-The reports directory may also be set via the TERMINALQ_REPORTS_DIR env var.
+The reports directory may also be set via the MANGO_REPORTS_DIR env var.
 """
 
 import os
@@ -98,7 +98,7 @@ def backfill(reports_dir: Path) -> list[dict]:
 
 
 if __name__ == "__main__":
-    default_dir = Path(os.getenv("TERMINALQ_REPORTS_DIR", str(Path.home() / "market-reports")))
+    default_dir = Path(os.getenv("MANGO_REPORTS_DIR", str(Path.home() / "market-reports")))
     directory = Path(sys.argv[1]) if len(sys.argv) > 1 else default_dir
     rows = backfill(directory)
     print(f"Backfilled {len(rows)} report(s) into the snapshot store.")

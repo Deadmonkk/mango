@@ -212,7 +212,7 @@ class TestLogSetup:
 class TestLogLevelResolution:
     def test_defaults_to_info_when_env_var_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Arrange
-        monkeypatch.delenv("TERMINALQ_LOG_LEVEL", raising=False)
+        monkeypatch.delenv("MANGO_LOG_LEVEL", raising=False)
 
         # Act
         level = _resolve_log_level()
@@ -222,7 +222,7 @@ class TestLogLevelResolution:
 
     def test_reads_debug_level_case_insensitively(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Arrange
-        monkeypatch.setenv("TERMINALQ_LOG_LEVEL", "debug")
+        monkeypatch.setenv("MANGO_LOG_LEVEL", "debug")
 
         # Act
         level = _resolve_log_level()
@@ -232,7 +232,7 @@ class TestLogLevelResolution:
 
     def test_reads_warning_level_uppercase(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Arrange
-        monkeypatch.setenv("TERMINALQ_LOG_LEVEL", "WARNING")
+        monkeypatch.setenv("MANGO_LOG_LEVEL", "WARNING")
 
         # Act
         level = _resolve_log_level()
@@ -242,7 +242,7 @@ class TestLogLevelResolution:
 
     def test_falls_back_to_info_on_unrecognised_value(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Arrange
-        monkeypatch.setenv("TERMINALQ_LOG_LEVEL", "NOT_A_REAL_LEVEL")
+        monkeypatch.setenv("MANGO_LOG_LEVEL", "NOT_A_REAL_LEVEL")
 
         # Act
         level = _resolve_log_level()

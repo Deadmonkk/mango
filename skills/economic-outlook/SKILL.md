@@ -11,18 +11,18 @@ Use this skill when the user asks about the state of the economy, recession risk
 
 Start broad and cheap, then go deep only where the headline numbers raise a question.
 
-1. `terminalq_get_macro_dashboard()` — headline growth, inflation, rates, and labour in one call. Sets the frame for everything after it.
-2. `terminalq_get_cpi_components()` — break inflation into shelter, energy, food, and core, since the composition of a CPI print matters as much as the headline.
-3. `terminalq_get_jolts()` — job openings, hires, quits, layoffs. Leads the unemployment rate, so it's the labour-market read that matters most for where things are headed, not just where they are.
-4. `terminalq_get_cycle_position()` — the recession dashboard: Sahm rule, yield curves, claims trend, NFCI, GDPNow. This is the single call that answers "where are we in the cycle."
-5. `terminalq_get_rates_dashboard()` — nominal yields, real (TIPS) yields, breakeven inflation. Needed to say whether a yield move is a growth story or an inflation story.
-6. `terminalq_get_credit_spreads()` — IG/HY spreads by rating tier, including the CCC vs. BB gap.
-7. `terminalq_get_gz_credit()` — the Gilchrist-Zakrajsek spread and excess bond premium, monthly since 1973. Use this for any historical-percentile credit claim; it isn't subject to the ICE licence truncation that shortened the CCC/BB series.
-8. `terminalq_get_consumer_health()` — debt service, delinquencies, saving rate, revolving credit. The leading edge of consumer stress, ahead of where it shows up in credit spreads or spending data.
-9. `terminalq_get_liquidity()` — net liquidity (Fed balance sheet less reverse repo and the Treasury account) and its trend, for the monetary backdrop.
-10. `terminalq_get_fiscal_health()` — debt-to-GDP and the monthly budget balance, if the fiscal/issuance angle is relevant to the question.
-11. `terminalq_get_fed_path()` — market-implied policy path from fed funds futures, to close the loop on what the market itself expects the Fed to do.
-12. `terminalq_get_economic_calendar(days=7)` — upcoming releases worth watching, so the outlook ends with "here's what could move this view next."
+1. `get_macro_dashboard()` — headline growth, inflation, rates, and labour in one call. Sets the frame for everything after it.
+2. `get_cpi_components()` — break inflation into shelter, energy, food, and core, since the composition of a CPI print matters as much as the headline.
+3. `get_jolts()` — job openings, hires, quits, layoffs. Leads the unemployment rate, so it's the labour-market read that matters most for where things are headed, not just where they are.
+4. `get_cycle_position()` — the recession dashboard: Sahm rule, yield curves, claims trend, NFCI, GDPNow. This is the single call that answers "where are we in the cycle."
+5. `get_rates_dashboard()` — nominal yields, real (TIPS) yields, breakeven inflation. Needed to say whether a yield move is a growth story or an inflation story.
+6. `get_credit_spreads()` — IG/HY spreads by rating tier, including the CCC vs. BB gap.
+7. `get_gz_credit()` — the Gilchrist-Zakrajsek spread and excess bond premium, monthly since 1973. Use this for any historical-percentile credit claim; it isn't subject to the ICE licence truncation that shortened the CCC/BB series.
+8. `get_consumer_health()` — debt service, delinquencies, saving rate, revolving credit. The leading edge of consumer stress, ahead of where it shows up in credit spreads or spending data.
+9. `get_liquidity()` — net liquidity (Fed balance sheet less reverse repo and the Treasury account) and its trend, for the monetary backdrop.
+10. `get_fiscal_health()` — debt-to-GDP and the monthly budget balance, if the fiscal/issuance angle is relevant to the question.
+11. `get_fed_path()` — market-implied policy path from fed funds futures, to close the loop on what the market itself expects the Fed to do.
+12. `get_economic_calendar(days=7)` — upcoming releases worth watching, so the outlook ends with "here's what could move this view next."
 
 ## Interpreting the output
 

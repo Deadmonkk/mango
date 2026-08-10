@@ -5,17 +5,17 @@ description: Full institutional-style macro and market intelligence brief — ru
 
 Run ALL of the following tools **simultaneously in parallel** (do not wait for one before starting the next):
 
-1. `terminalq_get_macro_dashboard` — core economic indicators
-2. `terminalq_get_cpi_components` — inflation breakdown
-3. `terminalq_get_jolts` — labor market depth
-4. `terminalq_get_credit_spreads` — credit market stress signal
-5. `terminalq_get_consumer_health` — debt service and delinquencies
-6. `terminalq_get_fiscal_health` — federal debt and deficit
-7. `terminalq_get_commodities` — oil, gold, gasoline, dollar
-8. `terminalq_get_market_overview` — equities, VIX, dollar, gold, oil
-9. `terminalq_get_asset_class_returns` — cross-asset performance
-10. `terminalq_get_international_markets` — global equity performance
-11. `terminalq_get_economic_calendar` — upcoming market-moving events
+1. `get_macro_dashboard` — core economic indicators
+2. `get_cpi_components` — inflation breakdown
+3. `get_jolts` — labor market depth
+4. `get_credit_spreads` — credit market stress signal
+5. `get_consumer_health` — debt service and delinquencies
+6. `get_fiscal_health` — federal debt and deficit
+7. `get_commodities` — oil, gold, gasoline, dollar
+8. `get_market_overview` — equities, VIX, dollar, gold, oil
+9. `get_asset_class_returns` — cross-asset performance
+10. `get_international_markets` — global equity performance
+11. `get_economic_calendar` — upcoming market-moving events
 
 ---
 

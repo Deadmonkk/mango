@@ -9,14 +9,14 @@ Use this skill when the user asks about their own holdings, allocation, concentr
 
 ## Tool sequence
 
-1. `terminalq_get_portfolio()` — recorded holdings by account, cost basis, and unrealized P/L as of the last recorded snapshot. The static baseline before anything live is layered on.
-2. `terminalq_get_portfolio_live()` — the same holdings repriced at the current market, with the day's move per position. Read against step 1 to separate "how it's positioned" from "what today did to it."
-3. `terminalq_get_allocation()` — breakdown by asset class, region, and sub-class, with concentration. The structural question: is this portfolio actually diversified or does it just look like it is.
-4. `terminalq_get_risk_metrics(period="1y")` — Sharpe, Sortino, max drawdown, VaR(95), beta vs. SPY. The quantitative risk read, computed from the trailing period given.
-5. `terminalq_get_watchlist()` — if the user tracks names outside the portfolio, useful context on where new capital might go or what's being monitored.
-6. `terminalq_get_sector_rotation()` — to judge whether the portfolio's sector tilts (from step 3) are currently in or out of favor.
-7. `terminalq_get_correlation_matrix(symbols)` — built from the portfolio's actual holdings, when concentration in step 3 suggests the positions might be more correlated with each other than the allocation breakdown alone shows.
-8. `terminalq_get_rsu_schedule()` and `terminalq_get_rsu_tax_analysis()` — only if the user holds unvested RSUs and asks about vesting exposure or the sell-vs-hold tax tradeoff.
+1. `get_portfolio()` — recorded holdings by account, cost basis, and unrealized P/L as of the last recorded snapshot. The static baseline before anything live is layered on.
+2. `get_portfolio_live()` — the same holdings repriced at the current market, with the day's move per position. Read against step 1 to separate "how it's positioned" from "what today did to it."
+3. `get_allocation()` — breakdown by asset class, region, and sub-class, with concentration. The structural question: is this portfolio actually diversified or does it just look like it is.
+4. `get_risk_metrics(period="1y")` — Sharpe, Sortino, max drawdown, VaR(95), beta vs. SPY. The quantitative risk read, computed from the trailing period given.
+5. `get_watchlist()` — if the user tracks names outside the portfolio, useful context on where new capital might go or what's being monitored.
+6. `get_sector_rotation()` — to judge whether the portfolio's sector tilts (from step 3) are currently in or out of favor.
+7. `get_correlation_matrix(symbols)` — built from the portfolio's actual holdings, when concentration in step 3 suggests the positions might be more correlated with each other than the allocation breakdown alone shows.
+8. `get_rsu_schedule()` and `get_rsu_tax_analysis()` — only if the user holds unvested RSUs and asks about vesting exposure or the sell-vs-hold tax tradeoff.
 
 ## Interpreting the output
 

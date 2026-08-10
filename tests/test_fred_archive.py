@@ -9,7 +9,7 @@ from mango.analytics import fred_archive
 
 @pytest.fixture(autouse=True)
 def tmp_archive_dir(tmp_path, monkeypatch):
-    """Isolate every test from the real ~/.terminalq/history/fred_archive/."""
+    """Isolate every test from the real ~/.mango/history/fred_archive/."""
     monkeypatch.setattr(fred_archive, "ARCHIVE_DIR", tmp_path)
     return tmp_path
 

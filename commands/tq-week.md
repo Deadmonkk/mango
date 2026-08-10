@@ -7,7 +7,7 @@ arguments:
     required: false
 ---
 
-Call `terminalq_load_recent_reports` (n = "$ARGUMENTS" if a number was given, else 7).
+Call `load_recent_reports` (n = "$ARGUMENTS" if a number was given, else 7).
 
 Write the **arc**, not a snapshot. Using the `snapshot_trend` (structured numbers) for the spine and the per-report `sections` (regime scores, what-changed, synthesis) for the narrative:
 

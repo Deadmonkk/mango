@@ -1,7 +1,7 @@
 """Markdown parsers for the user's local portfolio data files.
 
 Reads three hand-maintained markdown files from `PORTFOLIO_DIR` (an env var,
-defaulting to `~/.terminalq/`):
+defaulting to `~/.mango/`):
 
   - `portfolio-holdings.md` — one or more `## <account>` sections, each
     holding a pipe table of positions.
@@ -30,7 +30,7 @@ from mango.core.logging import log
 # Env var that overrides the default data directory (also used by tests to
 # point at a synthetic fixture directory).
 _ENV_VAR_PORTFOLIO_DIR = "PORTFOLIO_DIR"
-_DEFAULT_PORTFOLIO_DIR = Path.home() / ".terminalq"
+_DEFAULT_PORTFOLIO_DIR = Path.home() / ".mango"
 
 PORTFOLIO_HOLDINGS_FILENAME = "portfolio-holdings.md"
 RSU_SCHEDULE_FILENAME = "rsu-schedule.md"

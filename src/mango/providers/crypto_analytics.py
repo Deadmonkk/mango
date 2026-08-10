@@ -577,7 +577,7 @@ _BTC_VALUATION_ENDPOINTS: dict[str, tuple[str, str]] = {
 }
 
 
-_LAST_GOOD_VALUATION_PATH = Path.home() / ".terminalq" / "history" / "btc_valuation_last_good.json"
+_LAST_GOOD_VALUATION_PATH = Path.home() / ".mango" / "history" / "btc_valuation_last_good.json"
 
 
 def _load_last_good_valuation() -> dict | None:

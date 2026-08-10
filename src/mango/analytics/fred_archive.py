@@ -22,7 +22,7 @@ touches, not just the 5 known-restricted ones: it's cheap insurance.
 
 MECHANISM: every time fred.get_series_history() runs, this module merges
 the live-fetched values into a permanent local file under
-~/.terminalq/history/fred_archive/<series_id>.json (deduped by date,
+~/.mango/history/fred_archive/<series_id>.json (deduped by date,
 archive wins ties) and returns the union. So:
   - A one-time seed file (`<series_id>_seed.json`) can hold recovered
     pre-restriction history (only BAMLH0A0HYM2 has one today).
