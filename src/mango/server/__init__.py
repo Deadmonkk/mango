@@ -34,7 +34,7 @@ from typing import Any, Callable
 
 from mcp.server.fastmcp import FastMCP
 
-from mango.core import audit, usage_tracker
+from mango.core import audit, paths, usage_tracker
 from mango.core.env import load_env
 from mango.core.logging import get_logger
 from mango.core.redact import redact_text
@@ -138,6 +138,19 @@ def main() -> None:
         tools_portfolio,
         tools_reports,
     )
+
+    # Create the data directory (and migrate a pre-rename one) before any tool
+    # can be called. A fresh clone has no ~/.mango, and failing on first use
+    # with a missing-directory error is a bad first impression for something
+    # the program can simply create.
+    state = paths.bootstrap()
+    if state["created"]:
+        log.info("initialised data directory at %s", state["home"])
+    if state["migration"].get("migrated"):
+        log.info(
+            "migrated existing data from %s (the original was copied, not moved)",
+            state["migration"]["source"],
+        )
 
     log.info("Mango MCP server starting with %d tools", len(mcp._tool_manager._tools))
     mcp.run()

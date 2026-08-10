@@ -10,10 +10,11 @@ Run once:  python -m mango.backfill "/path/to/reports"
 The reports directory may also be set via the MANGO_REPORTS_DIR env var.
 """
 
-import os
 import re
 import sys
 from pathlib import Path
+
+from mango.core import paths
 
 from mango import history
 
@@ -98,7 +99,7 @@ def backfill(reports_dir: Path) -> list[dict]:
 
 
 if __name__ == "__main__":
-    default_dir = Path(os.getenv("MANGO_REPORTS_DIR", str(Path.home() / "market-reports")))
+    default_dir = paths.reports_dir()
     directory = Path(sys.argv[1]) if len(sys.argv) > 1 else default_dir
     rows = backfill(directory)
     print(f"Backfilled {len(rows)} report(s) into the snapshot store.")

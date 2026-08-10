@@ -60,6 +60,59 @@ uv run python -m mango   # logs: "Mango MCP server starting with 88 tools"
 
 The repo also ships 6 skills and 12 slash commands under `skills/` and `commands/`.
 
+## Where your data lives
+
+**Nothing you create is stored in this repository.** Clone it, pull it, delete
+and re-clone it — your data is never involved. It lives in a separate directory
+that Mango creates on first run:
+
+```
+~/.mango/                       # override with MANGO_HOME
+├── portfolio-holdings.md       # your positions      (you write these)
+├── watchlist.md                # symbols you track   (you write these)
+├── rsu-schedule.md             # optional
+├── accounts.md                 # optional
+├── history/                    # predictions ledger, regime snapshots, FRED archive
+├── cache/                      # provider responses (safe to delete)
+├── audit/                      # a record of every tool call
+└── usage/                      # daily call counts
+```
+
+Created with mode `700`, files `600` — it holds positions, an audit trail and
+cached responses from keyed APIs, and a default umask would leave those
+world-readable.
+
+The four markdown files are yours to write; Mango only reads them. Everything
+else it maintains. Deleting `cache/` is always safe. Deleting `history/` throws
+away your prediction track record, which is the one thing here that cannot be
+regenerated.
+
+### Relocating it
+
+| Variable | Moves |
+|---|---|
+| `MANGO_HOME` | Everything, in one setting |
+| `MANGO_CACHE_DIR` | Just the cache — e.g. onto a faster disk |
+| `MANGO_AUDIT_DIR`, `MANGO_USAGE_DIR`, `MANGO_HISTORY_DIR`, `MANGO_PORTFOLIO_DIR` | One directory each |
+| `MANGO_REPORTS_DIR` | Generated reports (default `~/market-reports`) |
+| `MANGO_ENV_FILE` | The credentials dotfile (default `~/.env`) |
+
+A specific variable always beats `MANGO_HOME`, so you can move one directory
+without disturbing the rest. `CACHE_DIR` and `PORTFOLIO_DIR` are still read for
+backward compatibility but warn: unprefixed names like those belong to whichever
+program reads them first, and pointing Mango's cache at another tool's directory
+corrupts both.
+
+### Upgrading
+
+`git pull` and restart. Upgrades touch code only — there is no step where
+updating Mango writes to, moves, or deletes anything under `MANGO_HOME`.
+
+If you used this project before it was renamed, a `~/.terminalq` directory is
+**copied** to the new location on first run. The original is left exactly where
+it is, and if the new location already has data the migration refuses and tells
+you, rather than guessing which prediction ledger is the current one.
+
 ## Secret scanning (required after cloning)
 
 Two git hooks gate secrets before they can reach GitHub. They live in

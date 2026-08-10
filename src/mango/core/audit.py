@@ -23,10 +23,11 @@ not a second copy of every payload.
 from __future__ import annotations
 
 import json
-import os
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
+
+from mango.core import paths
 from typing import Any
 
 from mango.core.logging import get_logger
@@ -35,13 +36,9 @@ from mango.core.redact import redact
 log = get_logger("audit")
 
 AUDIT_DIR_ENV_VAR = "MANGO_AUDIT_DIR"
-DEFAULT_AUDIT_DIR = Path.home() / ".mango" / "audit"
+DEFAULT_AUDIT_DIR = paths.home() / paths.AUDIT_SUBDIR
 
-AUDIT_DIR: Path = (
-    Path(os.environ[AUDIT_DIR_ENV_VAR]).expanduser()
-    if os.environ.get(AUDIT_DIR_ENV_VAR)
-    else DEFAULT_AUDIT_DIR
-)
+AUDIT_DIR: Path = paths.resolve_dir(paths.AUDIT_SUBDIR, AUDIT_DIR_ENV_VAR)
 
 # Enough to identify a result, far short of duplicating it.
 MAX_RESULT_CHARS = 2000

@@ -33,6 +33,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from mango.core import paths
+
 from mango.cache_guard import should_cache
 from mango.core.logging import log
 
@@ -45,10 +47,11 @@ DEFAULT_TTL_SECONDS = 60
 # own source tree, and `~/.mango/` is already where this tool keeps user
 # data (e.g. `~/.mango/history/`). Both caches coexist during the
 # transition; the worst case of the split is a value being fetched twice.
-DEFAULT_CACHE_DIR = Path.home() / ".mango" / "cache"
+DEFAULT_CACHE_DIR = paths.home() / paths.CACHE_SUBDIR
 
 # Environment variable an operator can set to point the cache somewhere else.
-_CACHE_DIR_ENV_VAR = "CACHE_DIR"
+_CACHE_DIR_ENV_VAR = "MANGO_CACHE_DIR"
+_LEGACY_CACHE_DIR_ENV_VAR = "CACHE_DIR"
 
 # Filenames are <sanitized-key-prefix>__<hash>.json. The sanitized prefix
 # keeps files grep-able/eyeballable; the hash guarantees two different keys
@@ -65,11 +68,7 @@ _KEY_HASH_LEN = 16
 # that fixture: a test run then writes fixture values into the operator's real
 # cache directory, where a later run can serve them as live data. That happened
 # on 2026-08-06 — 67 files, including a fabricated CAPE, landed in the live cache.
-CACHE_DIR = (
-    Path(os.environ[_CACHE_DIR_ENV_VAR]).expanduser()
-    if os.environ.get(_CACHE_DIR_ENV_VAR)
-    else DEFAULT_CACHE_DIR
-)
+CACHE_DIR = paths.resolve_dir(paths.CACHE_SUBDIR, _CACHE_DIR_ENV_VAR, _LEGACY_CACHE_DIR_ENV_VAR)
 
 
 def _cache_dir() -> Path:

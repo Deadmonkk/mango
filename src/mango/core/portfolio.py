@@ -18,9 +18,10 @@ are hand-edited and callers should not need to guard every call site.
 
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
+
+from mango.core import paths
 from typing import Any
 
 from mango.core.logging import log
@@ -29,8 +30,9 @@ from mango.core.logging import log
 
 # Env var that overrides the default data directory (also used by tests to
 # point at a synthetic fixture directory).
-_ENV_VAR_PORTFOLIO_DIR = "PORTFOLIO_DIR"
-_DEFAULT_PORTFOLIO_DIR = Path.home() / ".mango"
+_ENV_VAR_PORTFOLIO_DIR = "MANGO_PORTFOLIO_DIR"
+_LEGACY_ENV_VAR_PORTFOLIO_DIR = "PORTFOLIO_DIR"
+_DEFAULT_PORTFOLIO_DIR = paths.home()
 
 PORTFOLIO_HOLDINGS_FILENAME = "portfolio-holdings.md"
 RSU_SCHEDULE_FILENAME = "rsu-schedule.md"
@@ -48,10 +50,7 @@ def _resolve_portfolio_dir() -> Path:
     resolving once at import time and treating the result as the single
     source of truth is the safer default.
     """
-    raw_dir = os.environ.get(_ENV_VAR_PORTFOLIO_DIR)
-    if raw_dir:
-        return Path(raw_dir).expanduser()
-    return _DEFAULT_PORTFOLIO_DIR
+    return paths.resolve_dir("", _ENV_VAR_PORTFOLIO_DIR, _LEGACY_ENV_VAR_PORTFOLIO_DIR)
 
 
 # Module-level constant — tests monkeypatch this attribute directly
