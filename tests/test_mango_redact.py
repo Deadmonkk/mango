@@ -94,3 +94,30 @@ def test_non_string_scalars_pass_through():
 def test_secret_env_var_list_covers_the_keys_this_project_uses():
     for name in ("FRED_API_KEY", "FINNHUB_API_KEY", "BRAVE_API_KEY"):
         assert name in redact_mod.SECRET_ENV_VARS
+
+
+# --- Regression guards from the 2026-08-10 disclosure audit -----------------
+
+
+def test_secret_from_unlisted_env_var_is_redacted(monkeypatch):
+    """A provider added without updating SECRET_ENV_VARS must not leak.
+
+    The fixed allowlist was the whole mechanism until this audit; a new
+    credential-shaped env var now qualifies on its name alone.
+    """
+    monkeypatch.setenv("BRAND_NEW_PROVIDER_TOKEN", "zzzz111122223333qqqq")
+
+    assert redact({"api_key": "zzzz111122223333qqqq"}) == {"api_key": "REDACTED"}
+    assert redact("zzzz111122223333qqqq") == "REDACTED"
+    assert "zzzz111122223333qqqq" not in redact_text(
+        "Authorization: Bearer zzzz111122223333qqqq"
+    )
+
+
+def test_short_or_unrelated_env_values_are_not_redacted(monkeypatch):
+    """Guard the other direction: over-redaction corrupts real data."""
+    monkeypatch.setenv("SOME_TOKEN", "abc")          # under MIN_SECRET_LEN
+    monkeypatch.setenv("EDITOR", "vim-with-a-long-name")  # not credential-shaped
+
+    assert redact_text("value abc stays") == "value abc stays"
+    assert redact_text("vim-with-a-long-name stays") == "vim-with-a-long-name stays"

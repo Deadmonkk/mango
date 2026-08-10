@@ -10,11 +10,13 @@ audit, whose absence is invisible until you need the log.
 So the boilerplate lives in exactly one place (`tool` below) and each tool body
 is the single line that is actually specific to it: which provider to call.
 
-TOOL NAMES ARE DELIBERATELY UNCHANGED
+TOOL NAMES ARE FUNCTIONAL IDENTIFIERS
 -------------------------------------
-They are functional identifiers, not decoration: `~/.claude.json` and the
-FR/EOD report playbooks call them by name. Renaming would silently break every
-report. The names are kept; the implementations are original.
+`~/.claude.json` and the FR/EOD report playbooks call these tools by name, so a
+rename is never cosmetic — it breaks every report until both are updated in the
+same change. The `terminalq_` prefix was dropped once, deliberately and in
+lockstep with the config key and the playbooks; the server prefix now carries
+the name, so the tools themselves are unprefixed.
 
 INTROSPECTION DOES NOT AUDIT ITSELF
 -----------------------------------
@@ -35,6 +37,7 @@ from mcp.server.fastmcp import FastMCP
 from mango.core import audit, usage_tracker
 from mango.core.env import load_env
 from mango.core.logging import get_logger
+from mango.core.redact import redact_text
 
 load_env()
 
@@ -69,8 +72,15 @@ def tool(fn: Callable | None = None, *, audited: bool = True) -> Callable:
             try:
                 result = await func(*args, **kwargs)
             except Exception as exc:  # noqa: BLE001 — a tool must not kill the server
-                log.warning("tool %s raised: %s", func.__name__, exc)
-                result = {"error": str(exc), "tool": func.__name__}
+                # Redact BEFORE the text reaches either sink. httpx puts the
+                # failing URL in the exception, and for a keyed API that URL
+                # carries the key: on 2026-08-06 a FRED outage wrote the live
+                # key into user-facing files this way. The audit trail redacts
+                # on write, but the log stream and the payload handed back to
+                # the caller do not — so scrub at the source instead.
+                safe_error = redact_text(str(exc))
+                log.warning("tool %s raised: %s", func.__name__, safe_error)
+                result = {"error": safe_error, "tool": func.__name__}
             duration_ms = (time.monotonic() - started) * 1000
 
             if audited:

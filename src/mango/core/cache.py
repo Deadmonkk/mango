@@ -42,10 +42,10 @@ DEFAULT_TTL_SECONDS = 60
 # Fallback cache directory when CACHE_DIR is not set in the environment.
 # This deliberately does NOT match the host project's repo-relative
 # `data/cache` — a standalone extension package should not write inside its
-# own source tree, and `~/.terminalq/` is already where this tool keeps user
-# data (e.g. `~/.terminalq/history/`). Both caches coexist during the
+# own source tree, and `~/.mango/` is already where this tool keeps user
+# data (e.g. `~/.mango/history/`). Both caches coexist during the
 # transition; the worst case of the split is a value being fetched twice.
-DEFAULT_CACHE_DIR = Path.home() / ".terminalq" / "cache"
+DEFAULT_CACHE_DIR = Path.home() / ".mango" / "cache"
 
 # Environment variable an operator can set to point the cache somewhere else.
 _CACHE_DIR_ENV_VAR = "CACHE_DIR"
@@ -101,6 +101,38 @@ def _safe_filename(key: str) -> str:
 
 def _entry_path(key: str) -> Path:
     return _cache_dir() / _safe_filename(key)
+
+
+def _write_entry_no_follow(path: Path, payload: str) -> None:
+    """Write a cache entry, refusing to follow a symlink at the target path.
+
+    `Path.write_text` follows symlinks. Cache filenames are deterministic (a
+    sanitized prefix plus a SHA-256 of the key), so anything that can create a
+    file in the cache directory can pre-plant a symlink at a path this process
+    is going to write — pointing at `~/.zshrc`, `~/.ssh/config`, or any other
+    file the user can write — and the cache write lands there instead. Verified
+    exploitable before this guard existed.
+
+    `O_NOFOLLOW` makes the kernel refuse rather than trusting a check that could
+    go stale between the test and the open (TOCTOU). The mode is 0600 because a
+    default umask yields world-readable cache files, and cached payloads can
+    include keyed API responses.
+    """
+    if path.is_symlink():
+        log.warning("mango.cache: refusing to write through symlink at %s; removing it", path)
+        path.unlink()
+
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+    # fdopen takes ownership of the descriptor, so it must be closed by hand
+    # only if fdopen itself fails; once it succeeds, the `with` owns it and
+    # closing again could hit an unrelated descriptor that reused the number.
+    try:
+        handle = os.fdopen(fd, "w", encoding="utf-8")
+    except BaseException:
+        os.close(fd)
+        raise
+    with handle:
+        handle.write(payload)
 
 
 def _remove_quietly(path: Path) -> None:
@@ -170,6 +202,6 @@ def set(key: str, value: dict | list, ttl: int = DEFAULT_TTL_SECONDS) -> None:
 
     path = _entry_path(key)
     try:
-        path.write_text(json.dumps(entry, indent=2, sort_keys=True), encoding="utf-8")
+        _write_entry_no_follow(path, json.dumps(entry, indent=2, sort_keys=True))
     except OSError as exc:
         log.warning("mango.cache: failed to write cache entry for key %r to %s: %s", key, path, exc)

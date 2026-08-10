@@ -14,12 +14,15 @@ import logging
 import os
 import sys
 
+# redact imports only os/re — no cycle back into logging.
+from mango.core.redact import redact, redact_text
+
 # Name of the root logger for this project. Child loggers are namespaced
 # under this (e.g. "mango.fred") via `get_logger`.
 _ROOT_LOGGER_NAME = "mango"
 
 # Environment variable used to override the default log level.
-_LOG_LEVEL_ENV_VAR = "TERMINALQ_LOG_LEVEL"
+_LOG_LEVEL_ENV_VAR = "MANGO_LOG_LEVEL"
 
 # Fallback level when the env var is unset or holds an unrecognised value.
 _DEFAULT_LOG_LEVEL = logging.INFO
@@ -52,6 +55,28 @@ def _resolve_log_level() -> int:
     return _DEFAULT_LOG_LEVEL
 
 
+class _RedactingFilter(logging.Filter):
+    """Scrub credential values out of every record before it is emitted.
+
+    Applied at the handler rather than the call site on purpose. Providers log
+    the URL they were calling (see `coingecko.py`), and for a keyed API that URL
+    carries the key — but there are ~150 log statements, and securing them one
+    at a time means the next one added reopens the hole. A filter is the only
+    placement where "no log line can carry a secret" is a property of the
+    system rather than a habit.
+
+    The record's args are redacted before formatting, so lazy `%s` interpolation
+    (the form every call site uses) is covered.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = redact_text(record.msg)
+        if record.args:
+            record.args = redact(record.args)
+        return True
+
+
 def _configure_root_logger() -> logging.Logger:
     """Configure the "mango" logger exactly once and return it."""
     global _configured
@@ -64,6 +89,7 @@ def _configure_root_logger() -> logging.Logger:
     handler = logging.StreamHandler(stream=sys.stderr)
     formatter = logging.Formatter(fmt=_LOG_FORMAT, datefmt=_DATE_FORMAT)
     handler.setFormatter(formatter)
+    handler.addFilter(_RedactingFilter())
 
     root_logger.addHandler(handler)
     root_logger.setLevel(_resolve_log_level())

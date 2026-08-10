@@ -26,14 +26,26 @@ from typing import Any
 
 REDACTED = "REDACTED"
 
-# Environment variables holding credentials. Anything listed here is scrubbed
-# from persisted text wherever it appears.
+# Environment variables known to hold credentials. This list is a floor, not
+# the whole set — see _SECRET_ENV_NAME_PATTERN below.
 SECRET_ENV_VARS: tuple[str, ...] = (
     "FRED_API_KEY",
     "FINNHUB_API_KEY",
     "BRAVE_API_KEY",
     "POLYGON_API_KEY",
     "COINGECKO_API_KEY",
+)
+
+# A fixed allowlist fails the moment a provider is added and nobody updates it,
+# which silently reopens the exact leak this module exists to close. So any env
+# var whose NAME looks credential-shaped is treated as a secret too, and the
+# list above becomes a safety net rather than the mechanism.
+#
+# Matching on the name (not the value) is deliberate: an entropy test on values
+# would flag base64 payloads, hashes and long ticker lists, and blanking those
+# corrupts real data for no security gain.
+_SECRET_ENV_NAME_PATTERN = re.compile(
+    r"(?i)(^|_)(api[_-]?key|apikey|token|secret|password|passwd|private[_-]?key|credential)s?($|_)"
 )
 
 # Backstop for keys this process does not hold in its own environment — e.g. a
@@ -53,8 +65,11 @@ def _live_secrets() -> list[str]:
     Longest-first matters: if one secret is a substring of another, replacing
     the shorter one first would leave a fragment of the longer one behind.
     """
+    names = set(SECRET_ENV_VARS) | {
+        name for name in os.environ if _SECRET_ENV_NAME_PATTERN.search(name)
+    }
     values = {
-        v for name in SECRET_ENV_VARS
+        v for name in names
         if (v := os.environ.get(name, "").strip()) and len(v) >= MIN_SECRET_LEN
     }
     return sorted(values, key=len, reverse=True)
