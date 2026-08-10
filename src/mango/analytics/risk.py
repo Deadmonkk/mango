@@ -1,10 +1,9 @@
 """Portfolio risk analytics: Sharpe, Sortino, max drawdown, VaR(95), beta vs SPY.
 
-Clean-room implementation written directly from a written specification, not
-from any prior risk module in this codebase family.
-
-Definitions (state assumptions explicitly, since none of these are a single
-universally-agreed formula):
+Every metric below has more than one defensible formula in circulation, so
+each definition states the variant used and why. Read these before comparing
+a number here against one from another tool: a mismatch is far more often a
+convention difference than a bug on either side.
 
 - **Daily returns** are simple returns computed from each symbol's adjusted
   close (`get_historical` already returns split/dividend-adjusted closes —
@@ -18,16 +17,21 @@ universally-agreed formula):
 - **Sharpe ratio** = mean(daily excess return) / stdev(daily excess return),
   annualized by `sqrt(252)` (252 = the conventional US trading-day count).
   Excess return = daily return minus the daily risk-free rate.
-- **Sortino ratio** = mean(daily excess return) / downside deviation, where
-  downside deviation is the root-mean-square of negative excess returns over
-  ALL observations (the standard definition). NOTE: this deliberately differs
-  from the figure the previous implementation produced. Reproducing that number
-  would require a downside deviation LARGER than the same series' total
-  volatility, which the standard definition cannot yield — so it was treated as
-  a defect in that implementation rather than a target to match.
-  annualized the same way. Downside deviation is the population stdev of
-  *only* the excess-return days that are negative (Sortino's point is to not
-  penalize upside volatility).
+- **Sortino ratio** = mean(daily excess return) / downside deviation,
+  annualized by `sqrt(252)` like Sharpe. Downside deviation is the *target
+  downside deviation*: ``sqrt( sum(min(excess_t, 0)^2) / N )``, where N is
+  the count of ALL observations, not just the losing ones. Sortino exists to
+  stop upside volatility from counting as risk, so up days enter the
+  denominator as zeros — they are neutralized, not discarded.
+
+  Dividing by the down-day count instead is the common error, and it is not a
+  rounding difference: it keeps the same numerator sum over fewer terms, so
+  the denominator is always larger and the ratio always lower. The gap widens
+  the more one-sided the return series is, which is exactly the case Sortino
+  is meant to reward. On a representative 250-day window the two conventions
+  differ by roughly a third (see ``tests/test_mango_risk.py``), so a Sortino
+  from another source that sits near or below the Sharpe is worth checking
+  for this before treating it as comparable.
 - **Max drawdown** = the largest peak-to-trough decline in the portfolio's
   cumulative-return curve over the window, expressed as a negative fraction
   (e.g. -0.18 = an 18% drawdown from the running peak).
@@ -37,13 +41,15 @@ universally-agreed formula):
 - **Beta vs SPY** = cov(portfolio daily returns, SPY daily returns) /
   var(SPY daily returns), over the same aligned date window.
 
-**Risk-free rate assumption**: `mango.ext_settings` defines no risk-free-rate
-constant (checked 2026-08 — it only carries cache TTLs and
-technical/sentiment thresholds). This module assumes a **0% annual
-risk-free rate** (`RISK_FREE_RATE_ANNUAL` below), so Sharpe/Sortino here are
-effectively raw annualized return-per-unit-of-volatility rather than
-excess-of-T-bill. Override `RISK_FREE_RATE_ANNUAL` if the host project ever
-defines a real rate.
+**Risk-free rate**: `RISK_FREE_RATE_ANNUAL` below, currently 4.5% annual,
+converted to a daily rate and subtracted from each day's return. Sharpe and
+Sortino are both excess-of-risk-free by definition, so this is not a tuning
+knob — setting it to 0 inflates both ratios by an amount that scales with
+the rate, and does so silently. It is a static constant, not a live T-bill
+series, which means both ratios drift out of calibration as the real rate
+moves; revisit it when short rates have moved materially, and treat a
+cross-tool Sharpe comparison as invalid unless the other side's rate is
+known.
 
 Never raises: no holdings, or no usable price history for any holding (or
 for the SPY benchmark), returns ``{"error": ..., "source": "risk"}`` instead
@@ -68,13 +74,11 @@ SOURCE = "risk"
 TRADING_DAYS_PER_YEAR = 252
 _ANNUALIZATION_FACTOR = TRADING_DAYS_PER_YEAR**0.5
 
-# See module docstring: no host-defined risk-free rate exists, so this
-# assumes 0%. Expressed as an annual rate; divided by TRADING_DAYS_PER_YEAR
-# to get the daily rate subtracted from each day's return.
-# 4.5% annual. Sharpe and Sortino are excess-of-risk-free by definition, and a
-# zero rate silently inflates both — it reported 1.70 where the established
-# figure was 1.34. Kept as a module constant so it can be overridden without
-# touching the maths.
+# Annual rate; divided by TRADING_DAYS_PER_YEAR to get the daily rate
+# subtracted from each day's return. Static, not a live T-bill series — see
+# the module docstring for what that costs and when to revisit it. 0 is not a
+# safe default here: it inflates Sharpe and Sortino rather than neutralizing
+# them.
 RISK_FREE_RATE_ANNUAL = 0.045
 
 # VaR(95) = the 5th percentile of the daily-return distribution.
@@ -242,11 +246,11 @@ async def compute_portfolio_risk(period: str = "1y") -> dict:
     stdev_excess = statistics.pstdev(excess_returns) if len(excess_returns) > 1 else 0.0
     sharpe_ratio = (mean_excess / stdev_excess * _ANNUALIZATION_FACTOR) if stdev_excess else 0.0
 
-    # Downside deviation is the root-mean-square of NEGATIVE excess returns
-    # taken over ALL observations, not the stdev of the negatives alone.
-    # Dividing by the count of down days instead inflates the ratio — it read
-    # 1.98 against an established 1.31, because a portfolio with few but deep
-    # drawdowns looks better the fewer down days it has.
+    # Target downside deviation: RMS of the losses over ALL N observations.
+    # min(r, 0.0) maps up days to zero so they stay in the count but add
+    # nothing to the sum — that is the whole mechanism, and it is why the
+    # divisor below is len(downside_excess) (== N) and not the number of
+    # losing days. See the module docstring for why the other divisor is wrong.
     downside_excess = [min(r, 0.0) for r in excess_returns]
     downside_deviation = (
         (sum(r * r for r in downside_excess) / len(downside_excess)) ** 0.5

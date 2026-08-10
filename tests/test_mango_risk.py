@@ -123,13 +123,23 @@ async def test_compute_portfolio_risk_matches_hand_computed_metrics(monkeypatch)
     expected_sharpe = mean_excess / stdev_excess * (252**0.5)
     assert result["sharpe_ratio"] == pytest.approx(expected_sharpe, abs=1e-3)
 
-    # Sortino: same numerator; denominator is the root-mean-square of negative
-    # excess returns over ALL observations, which is the standard definition.
-    # Using only the down days inflates the ratio — a portfolio with few but
-    # deep drawdowns would score better the fewer down days it had.
+    # Sortino: same numerator; denominator is the root-mean-square of the
+    # losses over ALL observations (target downside deviation). Up days are
+    # mapped to zero, so they stay in the divisor without adding to the sum.
     downside_dev = (sum(min(r, 0.0) ** 2 for r in excess) / len(excess)) ** 0.5
     expected_sortino = mean_excess / downside_dev * (252**0.5)
     assert result["sortino_ratio"] == pytest.approx(expected_sortino, abs=1e-3)
+
+    # Guard the convention itself, not just the arithmetic: the divisor is N,
+    # never the count of losing days. The two agree only when every day is a
+    # loss, so this fixture (which has up days) separates them.
+    losing_days = [r for r in excess if r < 0]
+    assert 0 < len(losing_days) < len(excess), "fixture must contain both up and down days"
+    down_days_only_dev = (sum(r**2 for r in losing_days) / len(losing_days)) ** 0.5
+    wrong_sortino = mean_excess / down_days_only_dev * (252**0.5)
+    # Fewer terms over the same sum ⇒ larger denominator ⇒ strictly lower ratio.
+    assert wrong_sortino < expected_sortino
+    assert result["sortino_ratio"] != pytest.approx(wrong_sortino, abs=1e-3)
 
     # Max drawdown: worked out by hand from the cumulative-return curve —
     # the trough occurs after the -0.008 day, before the final +0.010 day
