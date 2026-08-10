@@ -1,10 +1,10 @@
 # Mango
 
-[![tests](https://github.com/Deadmonkk/terminalq-extensions/actions/workflows/tests.yml/badge.svg)](https://github.com/Deadmonkk/terminalq-extensions/actions/workflows/tests.yml)
+[![tests](https://github.com/Deadmonkk/mango/actions/workflows/tests.yml/badge.svg)](https://github.com/Deadmonkk/mango/actions/workflows/tests.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
 
-A financial-research toolkit for collecting market, credit, and crypto data from free public sources, putting raw numbers in historical context, and grading its own predictions. 43 modules, 166 tests, approximately 9,000 lines of code. Infrastructure is fully owned; some data providers depend on a host project (TerminalQ) for wiring — a patch captures these hooks.
+A financial-research toolkit for collecting market, credit, and crypto data from free public sources, putting raw numbers in historical context, and grading its own predictions. It runs as an MCP server exposing 88 tools to Claude Code. 66 modules, 575 tests, approximately 13,500 lines of code. Standalone — no host project, no patch to apply.
 
 ## What it does
 
@@ -28,51 +28,86 @@ Four lessons learned the hard way, now embedded as rules:
 
 **Rank, don't threshold.** The CCC−BB credit-quality gap lives in a ~3-year history window (ICE's license truncation), not the full 30-year series that the HY index kept. A percentile rank is only as strong as its history. Every percentile now prints the window it was measured over, and short windows are barred from "record" language. The Gilchrist-Zakrajšek spread (monthly since 1973, 642 observations) provides the long-history anchor.
 
-## Current status
-
-**Owned:**
-- All infrastructure modules (cache, logging, rate limiting, credential redaction) in `src/terminalq/mango/`
-- All data providers and analytics modules
-- The prediction ledger and regime scoring system
-- Test suite (166 tests, all offline)
-
-**Partial:** Some fallback data sources (e.g., crypto backups) live inside TerminalQ's own modules and activate only once the host project's code calls them. Those edits live in a reproducible patch; see `wiring/README.md` for details. Tests covering the wired features skip gracefully when the host project is not present, keeping the test suite usable standalone.
-
-**Not owned:** The TerminalQ host project itself. Mango modules are being migrated to full independence; until complete, installation involves both copying the source tree and applying the wiring patch.
+**State the convention, not just the number.** Most of these metrics have more than one defensible formula. Sortino alone differs by a third depending on whether the downside deviation divides by all observations or only the losing ones. Every such choice is documented at the definition site, because a mismatch against another tool is more often a convention difference than a bug.
 
 ## Installing
 
 ```bash
-git clone https://github.com/fakoli/terminalq.git
-git clone https://github.com/Deadmonkk/terminalq-extensions.git
-
-# Copy Mango's modules into TerminalQ
-cp -r terminalq-extensions/src/terminalq/*  terminalq/src/terminalq/
-cp -r terminalq-extensions/tests/*          terminalq/tests/
-cp -r terminalq-extensions/scripts          terminalq/
-
-cd terminalq && uv sync
+git clone https://github.com/Deadmonkk/mango.git
+cd mango && uv sync
 ```
 
-To activate the fallback crypto sources and full integration testing, apply the wiring patch:
+Then register it with Claude Code by adding this to `~/.claude.json` under `mcpServers`:
+
+```json
+"mango": {
+  "type": "stdio",
+  "command": "uv",
+  "args": ["run", "--directory", "/path/to/mango", "python", "-m", "mango"],
+  "env": {}
+}
+```
+
+Use an absolute path for `command` if `uv` is not on the PATH that Claude Code launches with — a GUI-launched app does not inherit your shell profile, and the failure looks like the server simply never starting.
+
+Restart Claude Code. The tools appear as `mcp__mango__get_quote`, `mcp__mango__get_risk_metrics`, and so on — the server prefix carries the name, so the tools themselves are unprefixed.
+
+Verify it came up:
 
 ```bash
-git apply /path/to/terminalq-extensions/wiring/upstream-wiring.patch
+uv run python -m mango   # logs: "Mango MCP server starting with 88 tools"
 ```
 
-See `wiring/README.md` for details on what this patch does and why it exists.
+The repo also ships 6 skills and 12 slash commands under `skills/` and `commands/`.
+
+## Secret scanning (required after cloning)
+
+Two git hooks gate secrets before they can reach GitHub. They live in
+`.githooks/` and are versioned, but git does not enable hooks automatically —
+each clone must opt in once:
+
+```bash
+brew install gitleaks
+git config core.hooksPath .githooks
+```
+
+- **pre-commit** scans the staged diff (fast, every commit).
+- **pre-push** scans full history — it catches anything that entered via
+  `--no-verify`, a rebase, or a commit predating the hooks.
+
+Both **fail closed**: if gitleaks is missing, the operation is refused rather
+than silently skipped. Findings print redacted, so the hook output never
+becomes a second copy of the secret.
+
+`.gitleaks.toml` extends the upstream ruleset with path rules for this
+project's private data (holdings, watchlist, prediction ledger, FR/EOD
+artifacts). Those files contain nothing a pattern scanner would recognise as a
+secret, so they are blocked by filename — the failure mode that actually
+happens is a copy landing where `.gitignore` does not reach.
+
+Test placeholders are allowlisted by **value** (`test_key_[0-9]+`), never by
+file: allowlisting a whole test file would stop a real key pasted into it from
+being caught, and test files are where that happens.
+
+If a secret ever does reach the remote, rotate it first — deleting the commit
+does not un-publish it.
 
 ## Running tests
 
+Test tooling lives in the `dev` extra, which `uv sync` does not install by default:
+
 ```bash
-cd terminalq && uv run pytest tests/
+uv sync --extra dev
+uv run pytest
 ```
 
-Expected: 156 pass, 10 skip (the skipped tests cover wiring-dependent features and will pass after applying the patch). All network calls are faked; tests run offline and consistently.
+Expected: **575 pass, 7 skip.** The 7 skips are integration tests for a host project that no longer exists; they skip by design rather than fail. All network calls are faked, so tests run offline and consistently.
+
+Running `uv run pytest` without the extra does not fail cleanly — pytest resolves from outside the project environment and collection dies on a missing `mcp` import, which looks like a broken dependency rather than a missing dev tool.
 
 ## Dependencies
 
-`httpx`, `pandas`, `yfinance`, `pytest`. TerminalQ includes all except pandas.
+`mcp[cli]`, `httpx`, `pandas`, `yfinance`, `ddgs`. The `mcp` pin is `<2` and load-bearing: 2.x relocated `mcp.server.fastmcp`, which the server imports, so an unpinned resolve breaks startup.
 
 ## Example: Average Daily Volume
 
@@ -106,20 +141,24 @@ The tool reports the median alongside the mean (because a handful of rebalance d
 ```
 Free public sources (NASA, CFTC, Fed, exchanges, web tables)
                     ↓
-Data providers (20 modules — keep working when a source breaks)
+Data providers (30 modules — keep working when a source breaks)
                     ↓
-Analytics (context: percentiles, correlation, stress backtests)
+Analytics (9 modules — percentiles, correlation, stress backtests)
                     ↓
 Prediction ledger (log the call, grade it on the due date, report accuracy)
+                    ↓
+MCP server (6 tool modules, 88 tools)
 ```
 
-Each layer is independently testable. Providers return `{"error": ...}` payloads instead of raising, so a caller can propagate the failure clearly. Analytics modules verify their outputs against independent sources rather than trusting a single number.
+Each layer is independently testable. Providers return `{"error": ...}` payloads instead of raising, so a caller can propagate the failure clearly. Analytics modules verify their outputs against independent sources rather than trusting a single number. The server layer registers each tool by its function name and wraps every call in audit logging, so a failing tool returns an error payload rather than killing the session.
 
 ## A few things I already know could be better
 
 - The web scrapers use regex pattern matching instead of a proper HTML parser. It works, avoids adding a dependency, and is the kind of shortcut worth complaining about.
-- One file, `src/terminalq/providers/_html.py`, has no tests of its own, and four scrapers depend on it. The weakest spot in test coverage.
-- A couple of modules (`providers/reports.py`, `providers/backfill.py`) only make full sense in the context of the complete FR workflow. Read in isolation, they'll look sparse.
+- One file, `src/mango/providers/_html.py`, has no tests of its own, and four scrapers depend on it. The weakest spot in test coverage.
+- A couple of modules (`providers/reports.py`, `backfill.py`) only make full sense in the context of the complete FR workflow. Read in isolation, they'll look sparse.
+- The repo directory and the local data directory (`~/.terminalq/`) still carry the old project's name. Cosmetic, but they outlived the thing they were named after.
+- `wiring/` is kept as a record of how Mango integrated with its former host. Nothing in the install path touches it.
 
 ## How this was built
 
@@ -129,7 +168,9 @@ The most useful lesson came from the first time I deployed: the code worked perf
 
 Neither I nor the AI caught it. We were both looking at my environment, where everything was already in place.
 
-The tests caught it. Which is why there are 166 of them, why they run offline on a clean machine every time, and why they run automatically on GitHub Actions on each commit.
+The tests caught it. Which is why there are 575 of them, why they run offline on a clean machine every time, and why they run automatically on GitHub Actions on each commit.
+
+The same lesson recurred when Mango was cut loose from its host: the server was configured, the config was correct, and it still could not start — `mcp` had only ever been a development dependency, and nothing had run the exact configured command. Verifying the thing you actually ship, not a close relative of it, is the whole discipline.
 
 ## License
 

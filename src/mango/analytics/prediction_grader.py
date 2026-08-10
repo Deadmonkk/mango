@@ -84,7 +84,7 @@ async def grade_open_predictions() -> dict:
     predictions = load_predictions()
     if not predictions:
         return {
-            "error": "No predictions logged yet. Use terminalq_log_prediction to start the ledger.",
+            "error": "No predictions logged yet. Use log_prediction to start the ledger.",
             "source": "prediction_grader (local + yahoo)",
         }
 

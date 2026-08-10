@@ -24,7 +24,7 @@ from pathlib import Path
 
 # Searched in order; the first that exists is loaded. PROJECT_ENV_FILE lets a
 # deployment point at its own file without touching the user's home directory.
-ENV_VAR_OVERRIDE = "TERMINALQ_ENV_FILE"
+ENV_VAR_OVERRIDE = "MANGO_ENV_FILE"
 DEFAULT_ENV_PATH = Path.home() / ".env"
 
 _loaded = False

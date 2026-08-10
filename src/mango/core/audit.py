@@ -35,7 +35,7 @@ from mango.core.redact import redact
 log = get_logger("audit")
 
 AUDIT_DIR_ENV_VAR = "MANGO_AUDIT_DIR"
-DEFAULT_AUDIT_DIR = Path.home() / ".terminalq" / "audit"
+DEFAULT_AUDIT_DIR = Path.home() / ".mango" / "audit"
 
 AUDIT_DIR: Path = (
     Path(os.environ[AUDIT_DIR_ENV_VAR]).expanduser()

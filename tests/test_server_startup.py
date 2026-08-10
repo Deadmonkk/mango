@@ -53,10 +53,10 @@ MINIMUM_EXPECTED_TOOLS = 80  # 88 registered as of the migration
 # ever break, these disappear while the host's own tools stay — a partial
 # failure that a bare "does it start" check would not notice.
 OWNED_BACKED_TOOLS = (
-    "terminalq_get_climate_risk_watch",
-    "terminalq_get_dealer_gamma",
-    "terminalq_get_regime_history",
-    "terminalq_get_rsu_tax_analysis",
+    "get_climate_risk_watch",
+    "get_dealer_gamma",
+    "get_regime_history",
+    "get_rsu_tax_analysis",
 )
 
 

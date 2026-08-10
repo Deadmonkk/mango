@@ -32,7 +32,7 @@ from mango.core.logging import get_logger
 log = get_logger("usage")
 
 USAGE_DIR_ENV_VAR = "MANGO_USAGE_DIR"
-DEFAULT_USAGE_DIR = Path.home() / ".terminalq" / "usage"
+DEFAULT_USAGE_DIR = Path.home() / ".mango" / "usage"
 
 USAGE_DIR: Path = (
     Path(os.environ[USAGE_DIR_ENV_VAR]).expanduser()

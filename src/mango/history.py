@@ -4,7 +4,7 @@ Each Full Report run computes a structured set of headline metrics and the two
 regime scores. Persisting one clean row per run turns the report archive into a
 time series we can mine — forward-return calibration of the regime scores, and a
 graded track record of the calls each report makes. Stored as JSON Lines under
-``~/.terminalq/history/`` (private, gitignored), one record per line.
+``~/.mango/history/`` (private, gitignored), one record per line.
 
 This is storage only — no network, no analytics. It never raises: callers get a
 result dict or an empty list, matching the provider error convention elsewhere.

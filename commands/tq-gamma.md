@@ -7,7 +7,7 @@ arguments:
     required: false
 ---
 
-Call `terminalq_get_dealer_gamma` with the symbol ("$ARGUMENTS", default SPY).
+Call `get_dealer_gamma` with the symbol ("$ARGUMENTS", default SPY).
 
 Present: spot price, the **call wall** (likely resistance), the **put wall** (likely support), the put/call open-interest ratio, and the net dealer-gamma sign.
 

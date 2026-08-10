@@ -11,16 +11,16 @@ Use this skill when the user brings a specific trade idea to test — "should I 
 
 Start by pricing the instrument and establishing the thesis's own claim, then gather evidence that would confirm or break it, then check positioning and risk last.
 
-1. `terminalq_get_quote(symbol)` — where it trades now; the reference point the thesis is implicitly measured against.
-2. `terminalq_get_technicals(symbol)` — RSI, moving averages, MACD, Bollinger, ATR. Establishes the technical setup and gives an ATR-based sense of normal daily movement, useful for sizing the risk later.
+1. `get_quote(symbol)` — where it trades now; the reference point the thesis is implicitly measured against.
+2. `get_technicals(symbol)` — RSI, moving averages, MACD, Bollinger, ATR. Establishes the technical setup and gives an ATR-based sense of normal daily movement, useful for sizing the risk later.
 3. Pull whatever tools test the specific mechanism the thesis depends on — this is the part that varies by trade and cannot be a fixed checklist:
-   - A fundamental/valuation thesis → `terminalq_get_financials(symbol, ...)`, `terminalq_get_analyst_ratings(symbol)`, `terminalq_get_earnings(symbol)`.
-   - A macro-driven thesis (rates, credit, inflation) → the relevant `terminalq_get_rates_dashboard()`, `terminalq_get_credit_spreads()`, `terminalq_get_cycle_position()`, `terminalq_get_fed_path()`.
-   - A positioning/flow thesis → `terminalq_get_cot_report(market)`, `terminalq_get_dealer_gamma(symbol)`, `terminalq_get_insider_transactions(symbol)`.
-   - A cross-asset or correlation thesis → `terminalq_get_correlation_matrix(symbols)`, `terminalq_get_correlation_regime(symbols)`.
-   - A crypto thesis → `terminalq_get_crypto_deep(symbol)`, `terminalq_get_btc_valuation()`, `terminalq_get_crypto_derivatives()`, `terminalq_get_crypto_funding(symbol)`.
-4. `terminalq_get_news(symbol, days=14)` — recent catalysts or news that could already have priced in, or undercut, the thesis.
-5. `terminalq_get_sector_rotation()` or `terminalq_get_market_valuation()` — the broader backdrop the trade sits inside; a good single-name thesis in a hostile macro/sector regime is a different risk than the same thesis with the wind behind it.
+   - A fundamental/valuation thesis → `get_financials(symbol, ...)`, `get_analyst_ratings(symbol)`, `get_earnings(symbol)`.
+   - A macro-driven thesis (rates, credit, inflation) → the relevant `get_rates_dashboard()`, `get_credit_spreads()`, `get_cycle_position()`, `get_fed_path()`.
+   - A positioning/flow thesis → `get_cot_report(market)`, `get_dealer_gamma(symbol)`, `get_insider_transactions(symbol)`.
+   - A cross-asset or correlation thesis → `get_correlation_matrix(symbols)`, `get_correlation_regime(symbols)`.
+   - A crypto thesis → `get_crypto_deep(symbol)`, `get_btc_valuation()`, `get_crypto_derivatives()`, `get_crypto_funding(symbol)`.
+4. `get_news(symbol, days=14)` — recent catalysts or news that could already have priced in, or undercut, the thesis.
+5. `get_sector_rotation()` or `get_market_valuation()` — the broader backdrop the trade sits inside; a good single-name thesis in a hostile macro/sector regime is a different risk than the same thesis with the wind behind it.
 
 ## Interpreting the output
 

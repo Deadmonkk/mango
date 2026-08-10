@@ -25,7 +25,7 @@ SECTOR_ETFS = {
 
 
 @tool
-async def terminalq_get_portfolio() -> dict:
+async def get_portfolio() -> dict:
     """Current holdings grouped by account, with cost basis and unrealised P/L."""
     holdings = portfolio.load_portfolio()
     if not holdings:
@@ -47,7 +47,7 @@ async def terminalq_get_portfolio() -> dict:
 
 
 @tool
-async def terminalq_get_portfolio_live() -> dict:
+async def get_portfolio_live() -> dict:
     """Holdings priced at the current market, with the day's move per position."""
     holdings = portfolio.load_portfolio()
     if not holdings:
@@ -77,7 +77,7 @@ async def terminalq_get_portfolio_live() -> dict:
 
 
 @tool
-async def terminalq_get_watchlist() -> dict:
+async def get_watchlist() -> dict:
     """Watchlist symbols with live quotes."""
     items = portfolio.load_watchlist()
     if not items:
@@ -93,7 +93,7 @@ async def terminalq_get_watchlist() -> dict:
 
 
 @tool
-async def terminalq_get_rsu_schedule() -> dict:
+async def get_rsu_schedule() -> dict:
     """RSU vesting schedule as recorded locally."""
     schedule = portfolio.load_rsu_schedule()
     if not schedule:
@@ -102,7 +102,7 @@ async def terminalq_get_rsu_schedule() -> dict:
 
 
 @tool
-async def terminalq_get_rsu_tax_analysis(marginal_rate: float = 0.32, ltcg_rate: float = 0.15) -> dict:
+async def get_rsu_tax_analysis(marginal_rate: float = 0.32, ltcg_rate: float = 0.15) -> dict:
     """Estimated tax on upcoming RSU vests and the sell-vs-hold trade-off.
 
     Estimates from local data at the rates given. Not tax advice.
@@ -111,13 +111,13 @@ async def terminalq_get_rsu_tax_analysis(marginal_rate: float = 0.32, ltcg_rate:
 
 
 @tool
-async def terminalq_get_allocation() -> dict:
+async def get_allocation() -> dict:
     """Portfolio breakdown by asset class, region and sub-class, with concentration."""
     return allocation.compute_allocation()
 
 
 @tool
-async def terminalq_get_risk_metrics(period: str = "1y") -> dict:
+async def get_risk_metrics(period: str = "1y") -> dict:
     """Portfolio risk: Sharpe, Sortino, max drawdown, VaR(95), beta vs SPY.
 
     All are backward-looking statistics of realised returns and say nothing
@@ -127,7 +127,7 @@ async def terminalq_get_risk_metrics(period: str = "1y") -> dict:
 
 
 @tool
-async def terminalq_chart_price(symbol: str, period: str = "6mo", chart_type: str = "line") -> dict:
+async def chart_price(symbol: str, period: str = "6mo", chart_type: str = "line") -> dict:
     """Text price chart for a ticker. `chart_type`: line or candlestick."""
     data = await historical.get_historical(symbol.upper(), period=period, interval="1d")
     if "error" in data:
@@ -143,7 +143,7 @@ async def terminalq_chart_price(symbol: str, period: str = "6mo", chart_type: st
 
 
 @tool
-async def terminalq_chart_comparison(symbols: str, period: str = "1y") -> dict:
+async def chart_comparison(symbols: str, period: str = "1y") -> dict:
     """Compare several tickers on one chart, as percent return from the start."""
     series = {}
     for ticker in csv_symbols(symbols):
@@ -161,7 +161,7 @@ async def terminalq_chart_comparison(symbols: str, period: str = "1y") -> dict:
 
 
 @tool
-async def terminalq_chart_allocation() -> dict:
+async def chart_allocation() -> dict:
     """Portfolio allocation by asset class as a proportional bar chart."""
     alloc = allocation.compute_allocation()
     if "error" in alloc:
@@ -174,7 +174,7 @@ async def terminalq_chart_allocation() -> dict:
 
 
 @tool
-async def terminalq_chart_yield_curve() -> dict:
+async def chart_yield_curve() -> dict:
     """US Treasury yield curve across maturities."""
     rates = await fred_ext.get_rates_dashboard()
     if "error" in rates:
@@ -192,7 +192,7 @@ async def terminalq_chart_yield_curve() -> dict:
 
 
 @tool
-async def terminalq_chart_sector_heatmap() -> dict:
+async def chart_sector_heatmap() -> dict:
     """S&P 500 sector performance relative to the index."""
     rotation = await sectors.get_sector_rotation()
     if "error" in rotation:

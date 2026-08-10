@@ -7,7 +7,7 @@ arguments:
     required: false
 ---
 
-Call `terminalq_get_rsu_tax_analysis`. If the user passed a rate in "$ARGUMENTS", pass it as `marginal_rate`.
+Call `get_rsu_tax_analysis`. If the user passed a rate in "$ARGUMENTS", pass it as `marginal_rate`.
 
 Present the upcoming vests as a table: **Date | Gross | Est. Tax | Net | Days Until**, then the upcoming totals.
 

@@ -11,18 +11,18 @@ Use this skill when the user wants a rounded picture of one company: "what does 
 
 Call in this order — cheap, structural calls first so later numbers have context; expensive or narrow calls only once the shape of the company is known.
 
-1. `terminalq_get_company_profile(symbol)` — name, industry, exchange, market cap. Establishes what kind of company this is before any number gets judged against a peer set.
-2. `terminalq_get_quote(symbol)` — live price and day range, so the rest of the report is anchored to where the stock trades right now.
-3. `terminalq_get_financials(symbol, statement="income", periods=8)`, then `statement="balance"` and `statement="cash"` — margins, debt load, and cash generation trend. Pull multiple periods so a single good or bad quarter doesn't read as a trend.
-4. `terminalq_get_technicals(symbol)` — SMA/EMA, RSI, MACD, Bollinger, ATR. Cheap and fast; establishes where price sits technically before layering fundamentals on top.
-5. `terminalq_get_analyst_ratings(symbol)` — consensus and price targets, as a sanity check against your own read, not a substitute for it.
-6. `terminalq_get_insider_transactions(symbol, limit=10)` — Form 4 filings.
-7. `terminalq_get_13f_holdings(institution)` — only if a specific notable holder is relevant to the question (e.g. the user names an institution, or the company is a known concentrated-holder situation). Skip by default; it's a narrow, expensive-to-interpret call.
-8. `terminalq_get_dividends(symbol, years=5)` — only if the company pays a dividend or the user asks about income/yield.
-9. `terminalq_get_filings(symbol, filing_type="10-K", limit=3)` — only if the financials raise a question the summary numbers can't answer (a debt covenant, a going-concern flag, a segment breakout).
-10. `terminalq_get_news(symbol, days=14)` — last, so headlines are read against the fundamentals already established rather than driving the narrative.
+1. `get_company_profile(symbol)` — name, industry, exchange, market cap. Establishes what kind of company this is before any number gets judged against a peer set.
+2. `get_quote(symbol)` — live price and day range, so the rest of the report is anchored to where the stock trades right now.
+3. `get_financials(symbol, statement="income", periods=8)`, then `statement="balance"` and `statement="cash"` — margins, debt load, and cash generation trend. Pull multiple periods so a single good or bad quarter doesn't read as a trend.
+4. `get_technicals(symbol)` — SMA/EMA, RSI, MACD, Bollinger, ATR. Cheap and fast; establishes where price sits technically before layering fundamentals on top.
+5. `get_analyst_ratings(symbol)` — consensus and price targets, as a sanity check against your own read, not a substitute for it.
+6. `get_insider_transactions(symbol, limit=10)` — Form 4 filings.
+7. `get_13f_holdings(institution)` — only if a specific notable holder is relevant to the question (e.g. the user names an institution, or the company is a known concentrated-holder situation). Skip by default; it's a narrow, expensive-to-interpret call.
+8. `get_dividends(symbol, years=5)` — only if the company pays a dividend or the user asks about income/yield.
+9. `get_filings(symbol, filing_type="10-K", limit=3)` — only if the financials raise a question the summary numbers can't answer (a debt covenant, a going-concern flag, a segment breakout).
+10. `get_news(symbol, days=14)` — last, so headlines are read against the fundamentals already established rather than driving the narrative.
 
-Optional context, pulled only if the question calls for it: `terminalq_get_sector_rotation()` (is the company's sector in or out of favor right now) and `terminalq_get_market_valuation()` (is the broad market rich or cheap, as a backdrop for the company's own multiple).
+Optional context, pulled only if the question calls for it: `get_sector_rotation()` (is the company's sector in or out of favor right now) and `get_market_valuation()` (is the broad market rich or cheap, as a backdrop for the company's own multiple).
 
 ## Interpreting the output
 

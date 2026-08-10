@@ -47,7 +47,7 @@ async def load_recent_reports(n: int = 7) -> dict:
     """
     if not REPORTS_DIR.exists():
         return {
-            "error": f"Reports directory not found: {REPORTS_DIR}. Set TERMINALQ_REPORTS_DIR to override.",
+            "error": f"Reports directory not found: {REPORTS_DIR}. Set MANGO_REPORTS_DIR to override.",
             "source": "reports (local)",
         }
 

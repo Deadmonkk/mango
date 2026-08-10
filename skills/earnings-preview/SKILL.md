@@ -9,14 +9,14 @@ Use this skill when the user asks what to expect from an upcoming earnings repor
 
 ## Tool sequence
 
-1. `terminalq_get_earnings(symbol)` — reported vs. expected EPS history and the forward estimate. This is the anchor for the whole preview: what does consensus expect, and how has this company tended to land relative to estimates in the past.
-2. `terminalq_get_quote(symbol)` — where the stock trades right now, the base the reaction will be measured from.
-3. `terminalq_get_technicals(symbol)` — RSI, moving averages, ATR. ATR in particular gives an expected-move sanity check: how much does this stock normally move in a day, so an earnings gap can be read as ordinary or extraordinary.
-4. `terminalq_get_analyst_ratings(symbol)` — consensus rating and price target, and whether targets have been moving up or down into the print (a proxy for sell-side sentiment shift).
-5. `terminalq_get_financials(symbol, statement="income", periods=4)` — the trailing quarters' revenue and margin trend, so the estimate can be judged against the company's own recent trajectory rather than in isolation.
-6. `terminalq_get_insider_transactions(symbol, limit=10)` — insider activity in the weeks before the print. Note the standard caveat below; this is a weak, noisy signal, not a strong one, and most pre-earnings insider activity is blocked by quiet-period policy anyway.
-7. `terminalq_get_news(symbol, days=14)` — recent catalysts, guidance updates, or preannouncements that would shift the setup independent of the print itself.
-8. `terminalq_get_sector_rotation()` — optional, when sector-wide positioning (e.g. other names in the group already reported and moved) is relevant context for how this print might be read.
+1. `get_earnings(symbol)` — reported vs. expected EPS history and the forward estimate. This is the anchor for the whole preview: what does consensus expect, and how has this company tended to land relative to estimates in the past.
+2. `get_quote(symbol)` — where the stock trades right now, the base the reaction will be measured from.
+3. `get_technicals(symbol)` — RSI, moving averages, ATR. ATR in particular gives an expected-move sanity check: how much does this stock normally move in a day, so an earnings gap can be read as ordinary or extraordinary.
+4. `get_analyst_ratings(symbol)` — consensus rating and price target, and whether targets have been moving up or down into the print (a proxy for sell-side sentiment shift).
+5. `get_financials(symbol, statement="income", periods=4)` — the trailing quarters' revenue and margin trend, so the estimate can be judged against the company's own recent trajectory rather than in isolation.
+6. `get_insider_transactions(symbol, limit=10)` — insider activity in the weeks before the print. Note the standard caveat below; this is a weak, noisy signal, not a strong one, and most pre-earnings insider activity is blocked by quiet-period policy anyway.
+7. `get_news(symbol, days=14)` — recent catalysts, guidance updates, or preannouncements that would shift the setup independent of the print itself.
+8. `get_sector_rotation()` — optional, when sector-wide positioning (e.g. other names in the group already reported and moved) is relevant context for how this print might be read.
 
 ## Interpreting the output
 

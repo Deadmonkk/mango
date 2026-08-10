@@ -57,7 +57,7 @@ async def get_rsu_tax_analysis(
 
     if not schedule:
         return {
-            "error": "No RSU schedule found. Add ~/.terminalq/rsu-schedule.md (run /tq-ingest).",
+            "error": "No RSU schedule found. Add ~/.mango/rsu-schedule.md (run /tq-ingest).",
             "source": "rsu_tax (local)",
         }
 

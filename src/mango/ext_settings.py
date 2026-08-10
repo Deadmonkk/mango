@@ -47,7 +47,7 @@ def _from_upstream(name: str, default):
 # Dereferencing _upstream directly here defeated the guarded import above: with
 # no host present _upstream is None and this raised AttributeError at import,
 # so the package could not load standalone at all.
-PORTFOLIO_DIR = _from_upstream("PORTFOLIO_DIR", Path.home() / ".terminalq")
+PORTFOLIO_DIR = _from_upstream("PORTFOLIO_DIR", Path.home() / ".mango")
 CACHE_TTL_HISTORY = _from_upstream("CACHE_TTL_HISTORY", 3600)
 CACHE_TTL_FUNDAMENTALS = _from_upstream("CACHE_TTL_FUNDAMENTALS", 86400)
 # Saved reports rarely live beside the portfolio data — they are usually

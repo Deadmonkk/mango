@@ -16,7 +16,7 @@ from mango.server import tool
 
 
 @tool
-async def terminalq_record_snapshot(
+async def record_snapshot(
     equity_regime: float | None = None,
     crypto_regime: float | None = None,
     btc: float | None = None,
@@ -53,7 +53,7 @@ async def terminalq_record_snapshot(
 
 
 @tool
-async def terminalq_get_regime_history(forward_days: int = 30) -> dict:
+async def get_regime_history(forward_days: int = 30) -> dict:
     """Realised forward returns grouped by regime-score band.
 
     Reports matured sample counts honestly. A band with few samples, or only
@@ -63,7 +63,7 @@ async def terminalq_get_regime_history(forward_days: int = 30) -> dict:
 
 
 @tool
-async def terminalq_log_prediction(
+async def log_prediction(
     claim: str,
     symbol: str,
     direction: str,
@@ -80,7 +80,7 @@ async def terminalq_log_prediction(
 
 
 @tool
-async def terminalq_grade_predictions() -> dict:
+async def grade_predictions() -> dict:
     """Settle every due prediction against actual prices and report the record.
 
     Each call settles on the close at its due date, not on the day grading ran,
@@ -90,13 +90,13 @@ async def terminalq_grade_predictions() -> dict:
 
 
 @tool
-async def terminalq_load_recent_reports(n: int = 7) -> dict:
+async def load_recent_reports(n: int = 7) -> dict:
     """Key sections of recent saved reports, for comparing against earlier runs."""
     return await reports.load_recent_reports(n)
 
 
 @tool
-async def terminalq_get_event_scenarios(days: int = 7) -> dict:
+async def get_event_scenarios(days: int = 7) -> dict:
     """Upcoming releases with what a hotter or cooler print would imply.
 
     Anchored to the latest recorded regime, so the reaction function is
@@ -106,13 +106,13 @@ async def terminalq_get_event_scenarios(days: int = 7) -> dict:
 
 
 @tool
-async def terminalq_get_prediction_markets(topic: str = "Fed rate") -> dict:
+async def get_prediction_markets(topic: str = "Fed rate") -> dict:
     """Real-money prediction-market odds. External; a cross-check, never an input."""
     return await prediction_markets.get_prediction_markets(topic)
 
 
 @tool
-async def terminalq_speak(text: str, voice_name: str = "") -> dict:
+async def speak(text: str, voice_name: str = "") -> dict:
     """Read text aloud through the system voice."""
     return await voice.speak(text, voice_name)
 
@@ -122,13 +122,13 @@ async def terminalq_speak(text: str, voice_name: str = "") -> dict:
 # buries the entries someone was looking for.
 
 @tool(audited=False)
-async def terminalq_get_audit_log(date: str = "") -> dict:
+async def get_audit_log(date: str = "") -> dict:
     """Recent tool calls with timings and failures. Not itself audited."""
     return audit.get_audit_log()
 
 
 @tool(audited=False)
-async def terminalq_get_usage_stats() -> dict:
+async def get_usage_stats() -> dict:
     """Per-tool call counts, failure rates and payload sizes. Not itself audited."""
     summary = audit.get_audit_summary()
     summary["daily_calls"] = await usage_tracker.get_daily_usage("all_tools")
