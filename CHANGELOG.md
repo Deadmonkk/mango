@@ -3,6 +3,86 @@
 Entries that change what a number *means* are listed first in each release,
 because those are the ones that make two reports incomparable.
 
+## 2026-08-11
+
+### Changed — affects report figures
+
+- **A provider's explicit null is no longer reported as a source failure.** A
+  path that does not resolve is a failure; a path that resolves to JSON null is
+  the provider saying "not meaningful here". Folding both into
+  `data unavailable (source failed)` published three climate regions on
+  2026-08-10 as unknown when their data had in fact been returned — Mato Grosso
+  read as cold-and-unknown when it was cold-and-WETTER-than-normal, which
+  inverts the soy/corn interpretation. Nulls now render as
+  `n/a (provider returned null — not a failure)`, and the climate row falls back
+  to the absolute millimetres the provider did return.
+
+  **This is a labelling fix, not a change of series.** No figure moves; cells
+  that read as failures may now carry a value. Reports remain comparable and the
+  schema stays at v2.
+
+### Added
+
+- **The collector writes the finished report, not just a digest.**
+  `fr_collect.py --emit-report` emits `YYYY-MM-DD-{fr,eod}.md` with every
+  deterministic block already populated and prose left as delimited, empty slots
+  (`<!-- PROSE:key -->`). Previously every table was transported through the
+  model so the model could copy it back into a file: ~15k tokens per run of pure
+  transport, and "never rebuild the tables" was a matter of trust rather than
+  structure. It is now structural — the only bytes the model writes are prose.
+- **`fr_prose.py`** injects prose into those slots, failing loudly on an unknown
+  or missing marker rather than appending. Idempotent, so a slot can be refilled
+  on an intraday re-run. It routes to the FR or EOD slot set by inspecting the
+  report's own markers.
+- **The §0 delta is computed in code.** Each FR run writes a flat
+  `fr_values_<date>.json` snapshot that the next run diffs against, instead of
+  the model re-reading yesterday's report. Only metrics that moved take a row;
+  the unchanged ones are counted and named so the denominator stays visible.
+- **EOD report generation** (`eod_report.py` / `eod_render.py`), mirroring FR.
+  The sector scoreboard, gainer/loser split and asset-class grid are ranked in
+  code — "top gainers" is a sort, not a judgement — and §7's expected ranges are
+  ATR-derived bands labelled, in the generated caption, as explicitly not a
+  forecast. The two EOD integrity rules now live in the template rather than
+  depending on the prose to restate them.
+- **`climate_map.py`** regenerates the standing climate-map artifact's four
+  sentinel-delimited data blocks and preserves everything else byte for byte. A
+  missing or duplicated sentinel is a hard error: the map is published to a
+  stable URL, so a partial update is worse than no update. It replaces ~20
+  hand-made string replacements per run.
+- **`fr_sidecar.py`** filters the EXTERNAL community pulse. The 2026-08-10 macro
+  run returned six top-ranked clusters — broadcast-ownership rules, judicial
+  confirmations, water allocation, a vandalism prosecution, federal land, and
+  student loans — every one matched on the bare token "federal" and none bore on
+  the Fed path. A cluster is now kept only on a multi-word market phrase or a
+  domain+market token pair; Polymarket rows are always kept, since an odds quote
+  with a volume is a market price.
+- **Rows the spec required but no run ever rendered**: CPI components, the six
+  cycle signals with their own meanings, consumer delinquencies and fiscal
+  ratios, the correlation regime, COT for the S&P/gold/bitcoin, international
+  markets, and PPI/retail-sales calendar priors (which rendered a bare "—"
+  because `get_event_scenarios` anchors only cpi/claims/jobs/payroll).
+
+### Fixed
+
+- A failed mover universe falls back to the watchlist. The failure sentinel is a
+  truthy dict, so the `or` fallback was unreachable and a single Finnhub blip
+  emptied the movers table while usable quotes sat beside it.
+- A malformed entry in the asset-class or market-overview payload is dropped, or
+  fails its own row, instead of raising and aborting the whole report build.
+- The gainer/loser split can no longer list the same name as both, which it did
+  whenever the universe was smaller than twice the display limit.
+
+### Unchanged, deliberately
+
+- **Report schema stays v2.** Everything above is new sources, new rows, or bug
+  fixes; no figure changes what it means, so reports across this release remain
+  directly comparable.
+- **`grade_predictions` still runs as part of collection.** It writes to the
+  ledger, so report generation is not side-effect free — but it touches only
+  open, past-due calls and settles each on the close at its *due* date, so the
+  write is idempotent and independent of when the run happened. Splitting
+  grading from collection is deferred rather than rushed.
+
 ## 2026-08-07
 
 ### Report schema v2

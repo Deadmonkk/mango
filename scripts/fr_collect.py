@@ -58,7 +58,16 @@ from typing import Any, Awaitable, Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from fr_sections import render_digest  # noqa: E402
+from fr_sections import render_digest
+from eod_report import EOD_PROSE_SLOTS, build_eod_report, eod_report_path
+from fr_report import (
+    PROSE_SLOTS,
+    VALUES_PREFIX,
+    build_report,
+    extract_values,
+    load_prior_values,
+    report_path,
+)  # noqa: E402
 
 from mango.core.redact import redact  # noqa: E402
 from mango.core import fred as mango_fred  # noqa: E402
@@ -103,6 +112,21 @@ FAIL = "data unavailable (source failed)"
 # Tickers pulled for the EOD research-watchlist block. Set FR_WATCHLIST
 # (comma-separated) to your own names; the default is an example only.
 WATCHLIST = [t.strip().upper() for t in os.getenv("FR_WATCHLIST", "AAPL,MSFT,NVDA,JPM,XOM").split(",") if t.strip()]
+
+# EOD §3 ranks gainers/losers. Ranking is a SORT, not a judgement, so the
+# universe is fixed here and ordered in code rather than being chosen by the
+# model from a screener each evening. Liquid large caps across every sector so
+# the tails mean something. Override with FR_MOVERS.
+_DEFAULT_MOVERS = (
+    "AAPL,MSFT,NVDA,AMZN,GOOGL,META,TSLA,AVGO,AMD,NFLX,"
+    "JPM,BAC,GS,V,MA,BRK-B,"
+    "XOM,CVX,COP,"
+    "UNH,JNJ,LLY,PFE,"
+    "WMT,COST,HD,PG,KO,MCD,"
+    "CAT,BA,GE,HON,LMT,"
+    "NEE,DUK,LIN,SHW,PLD,AMT"
+)
+MOVERS = [t.strip().upper() for t in os.getenv("FR_MOVERS", _DEFAULT_MOVERS).split(",") if t.strip()]
 
 
 def a(coro_fn: Callable[..., Awaitable[Any]]) -> Callable[..., Any]:
@@ -218,6 +242,11 @@ TOOL_MAP_FR: dict = {
     "fed_path": (a(market_data.get_fed_path), (), {}),
     "cycle_position": (a(cycle.get_cycle_position), (), {}),
     "mc_hy_spread": (a(fred_ext.get_metric_context), ("hy_spread",), {}),
+    # Calendar priors for §11. get_event_scenarios can only anchor cpi/claims/
+    # jobs/payroll, so PPI and retail sales returned a bare "—" every run and had
+    # to be backfilled by hand on 2026-08-10. Pull them here instead.
+    "mc_PPIFIS": (a(fred_ext.get_metric_context), ("PPIFIS",), {}),
+    "mc_RSAFS": (a(fred_ext.get_metric_context), ("RSAFS",), {}),
     # --- EY-gap panel (11): 10 metric_context series + GSCPI web_search ---
     **{f"mc_{sid}": (a(fred_ext.get_metric_context), (sid,), {}) for sid in _EY_GAP_SERIES},
     "web_search_GSCPI_EXTERNAL": (
@@ -264,6 +293,7 @@ TOOL_MAP_EOD: dict = {
         (WATCHLIST,),
         {},
     ),
+    "quotes_batch_movers": (a(finnhub.get_quotes_batch), (MOVERS,), {}),
     "rates_dashboard": (a(fred_ext.get_rates_dashboard), (), {}),
     "commodities": (a(fred_ext.get_commodities_dashboard), (), {}),
     "credit_spreads": (a(fred_ext.get_credit_spreads_dashboard), (), {}),
@@ -330,6 +360,18 @@ def write_brief(raw: dict, derived: dict, mode: str, date: str) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", choices=["fr", "eod"], required=True)
+    ap.add_argument(
+        "--emit-report",
+        action="store_true",
+        help="also write YYYY-MM-DD-{fr,eod}.md with every deterministic block "
+             "populated and empty prose slots (see fr_report.py / eod_report.py).",
+    )
+    ap.add_argument(
+        "--reports-dir",
+        type=Path,
+        default=Path(os.getenv("FR_REPORTS_DIR", str(BRIEF_DIR.parent))),
+        help="where --emit-report writes the report (default: the briefs dir's parent)",
+    )
     args = ap.parse_args()
     date = dt.date.today().isoformat()
     tool_map = TOOL_MAP_FR if args.mode == "fr" else TOOL_MAP_EOD
@@ -353,6 +395,31 @@ def main() -> int:
     digest_path.write_text(digest)
     print(f"wrote {digest_path}  ({len(digest)} chars ~= {len(digest)//4} tok)")
     print(f"      raw brief kept as audit trail ({len(brief)} chars)")
+
+    if args.mode == "fr":
+        # The flat value snapshot is what the NEXT run diffs against, so it is
+        # written on every FR run, not only when a report is emitted.
+        values = extract_values(raw, derived)
+        (BRIEF_DIR / f"{VALUES_PREFIX}{date}.json").write_text(json.dumps(values, indent=2, default=str))
+
+    if args.emit_report and args.mode == "eod":
+        report = build_eod_report(raw, derived, date)
+        args.reports_dir.mkdir(parents=True, exist_ok=True)
+        out_path = eod_report_path(args.reports_dir, date)
+        out_path.write_text(report, encoding="utf-8")
+        print(f"wrote {out_path}  ({len(report)} chars — deterministic blocks populated)")
+        print(f"      prose slots to fill: {', '.join(k for k, _ in EOD_PROSE_SLOTS)}")
+        return 0
+
+    if args.emit_report:
+        prior_values, prior_date = load_prior_values(BRIEF_DIR, date)
+        report = build_report(raw, derived, date, prior_values, prior_date)
+        args.reports_dir.mkdir(parents=True, exist_ok=True)
+        out_path = report_path(args.reports_dir, date)
+        out_path.write_text(report, encoding="utf-8")
+        print(f"wrote {out_path}  ({len(report)} chars — deterministic blocks populated)")
+        print(f"      prose slots to fill: {', '.join(k for k, _ in PROSE_SLOTS)}")
+        print(f"      baseline for delta: {prior_date or 'none (first run)'}")
     return 0
 
 

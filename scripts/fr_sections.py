@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from fr_render import (
     FAIL,
+    NOT_MEANINGFUL,
     Field,
     Section,
     crypto_components,
@@ -53,10 +54,31 @@ SECTIONS: tuple[Section, ...] = (
         Field("Realized effective tariff", "_derived", "realized_tariff_pct", PCT),
         Field("Prime-age LFPR", "mc_LNS11300060", "latest", PCT, read_path="interpretation"),
         Field("Productivity (OPHNFB)", "mc_OPHNFB", "latest", read_path="interpretation"),
+        # Composition, not just the headline: an energy-led fall and a broad
+        # disinflation look identical at the top line. Collected since the map was
+        # written but never rendered until 2026-08-10.
+        Field("CPI shelter", "cpi_components", "indicators.cpi_shelter.latest_value"),
+        Field("CPI energy", "cpi_components", "indicators.cpi_energy.latest_value"),
+        Field("CPI food & beverages", "cpi_components", "indicators.cpi_food.latest_value"),
+        Field("CPI core goods", "cpi_components", "indicators.cpi_core_goods.latest_value"),
+        Field("CPI services ex energy", "cpi_components", "indicators.cpi_services.latest_value"),
+        Field("CPI m/m change", "cpi_components", "indicators.cpi.change"),
+        Field("Core CPI m/m change", "cpi_components", "indicators.core_cpi.change"),
+        Field("Energy m/m change", "cpi_components", "indicators.cpi_energy.change"),
+        Field("Shelter m/m change", "cpi_components", "indicators.cpi_shelter.change"),
     )),
     Section("2", "Cycle Position & Recession Risk", (
         Field("Recession signals active", "cycle_position", "signals_active", read_path="verdict"),
         Field("Signals available", "cycle_position", "signals_available"),
+        # The count alone hides whether a signal sits near its trigger. Each
+        # signal's own `meaning` string carries the Read.
+        Field("Sahm rule", "cycle_position", "signals.0.value", read_path="signals.0.meaning"),
+        Field("Yield curve 10y−2y", "cycle_position", "signals.1.value", read_path="signals.1.meaning"),
+        Field("Yield curve 10y−3m", "cycle_position", "signals.2.value", read_path="signals.2.meaning"),
+        Field("Claims trend", "cycle_position", "signals.3.value", read_path="signals.3.meaning"),
+        Field("Financial conditions (NFCI)", "cycle_position", "signals.4.value",
+              read_path="signals.4.meaning"),
+        Field("GDPNow nowcast", "cycle_position", "signals.5.value", read_path="signals.5.meaning"),
     )),
     Section("3", "Credit, Consumer & Fiscal", (
         Field("IG spread", "credit_spreads", "indicators.ig_spread.latest_value", PP),
@@ -74,6 +96,20 @@ SECTIONS: tuple[Section, ...] = (
         Field("GZ spread percentile", "gz_credit", "gz_spread.percentile_since_start", PCT),
         Field("Excess bond premium", "gz_credit", "excess_bond_premium.latest", PP,
               read_path="ebp_signal"),
+        # Delinquencies are the LAGGING confirmation of the income squeeze the
+        # saving-rate/revolving-credit rows above lead. Both halves belong here.
+        Field("Household debt service (% of DPI)", "consumer_health",
+              "indicators.debt_service_ratio.latest_value", PCT),
+        Field("Credit-card delinquency", "consumer_health",
+              "indicators.cc_delinquency.latest_value", PCT),
+        Field("Consumer-loan delinquency", "consumer_health",
+              "indicators.consumer_delinquency.latest_value", PCT),
+        Field("Mortgage delinquency", "consumer_health",
+              "indicators.mortgage_delinquency.latest_value", PCT),
+        Field("Federal debt / GDP", "fiscal_health",
+              "indicators.federal_debt_gdp.latest_value", PCT),
+        Field("Federal deficit (monthly, $M)", "fiscal_health",
+              "indicators.federal_deficit.latest_value"),
     )),
     Section("4", "Liquidity, Rates & Fed Path", (
         Field("Net liquidity ($bn)", "liquidity", "net_liquidity_proxy_billions"),
@@ -121,6 +157,20 @@ SECTIONS: tuple[Section, ...] = (
         Field("Call wall (SPY)", "dealer_gamma_SPY", "call_wall"),
         Field("Put wall (SPY)", "dealer_gamma_SPY", "put_wall"),
         Field("Put/call OI ratio (SPY)", "dealer_gamma_SPY", "put_call_oi_ratio"),
+        # Required by the FR playbook (§6 correlation-regime check + COT), collected
+        # since the map was written but never rendered until 2026-08-10.
+        Field("Correlation regime", "correlation_regime", "verdict"),
+        Field("Coupling recent (~1mo)", "correlation_regime", "avg_coupling_recent"),
+        Field("Coupling baseline (~1q)", "correlation_regime", "avg_coupling_baseline"),
+        Field("Correlation avg |Δ|", "correlation_regime", "avg_abs_delta"),
+        Field("COT S&P 500 large-spec net", "cot_report_sp500", "large_speculators.net",
+              read_path="signal"),
+        Field("COT S&P 500 spec % of OI", "cot_report_sp500", "large_spec_pct_of_oi", PCT),
+        Field("COT S&P 500 net WoW", "cot_report_sp500", "large_speculators.net_change"),
+        Field("COT gold large-spec net", "cot_report_gold", "large_speculators.net",
+              read_path="signal"),
+        Field("COT gold spec % of OI", "cot_report_gold", "large_spec_pct_of_oi", PCT),
+        Field("COT gold net WoW", "cot_report_gold", "large_speculators.net_change"),
     )),
     Section("7", "Commodities, Dollar & Climate Risk", (
         Field("WTI crude", "commodities", "indicators.wti_oil.latest_value"),
@@ -162,6 +212,10 @@ SECTIONS: tuple[Section, ...] = (
         Field("MVRV percentile vs history", "btc_valuation", "mvrv_percentile", PCT),
         Field("MVRV as-of / staleness", "btc_valuation", "as_of", read_path="staleness"),
         Field("MVRV source & agreement", "btc_valuation", "source", read_path="source_agreement"),
+        Field("COT bitcoin large-spec net", "cot_report_btc", "large_speculators.net",
+              read_path="signal"),
+        Field("COT bitcoin spec % of OI", "cot_report_btc", "large_spec_pct_of_oi", PCT),
+        Field("COT bitcoin net WoW", "cot_report_btc", "large_speculators.net_change"),
     )),
     Section("10", "Crypto Flows", (
         Field("BTC ETF flow (latest day)", "btc_etf_flows", "latest.total_usd_m", "M",
@@ -170,6 +224,20 @@ SECTIONS: tuple[Section, ...] = (
         Field("Stablecoin supply", "stablecoins", "total_supply_usd", read_path="trend_signal"),
         Field("Stablecoin 30d change", "stablecoins", "supply_change_30d_pct", PCT),
         Field("DeFi TVL", "defi_overview", "total_tvl_usd", read_path="trend_signal"),
+    )),
+    Section("11", "Global Markets & Calendar Priors", (
+        Field("MSCI EAFE ex-US (EFA) YTD", "international_markets", "markets.EFA.ytd_return_pct", PCT),
+        Field("Japan (EWJ) YTD", "international_markets", "markets.EWJ.ytd_return_pct", PCT),
+        Field("Europe (VGK) YTD", "international_markets", "markets.VGK.ytd_return_pct", PCT),
+        Field("Emerging markets (VWO) YTD", "international_markets", "markets.VWO.ytd_return_pct", PCT),
+        Field("China large-cap (FXI) YTD", "international_markets", "markets.FXI.ytd_return_pct", PCT),
+        Field("India (INDA) YTD", "international_markets", "markets.INDA.ytd_return_pct", PCT),
+        Field("South Korea (EWY) YTD", "international_markets", "markets.EWY.ytd_return_pct", PCT),
+        Field("Brazil (EWZ) YTD", "international_markets", "markets.EWZ.ytd_return_pct", PCT),
+        # Calendar PRIORS. get_event_scenarios only anchors cpi/claims/jobs/payroll,
+        # so PPI and retail sales rendered a bare "—" until 2026-08-10.
+        Field("PPI final demand (prior)", "mc_PPIFIS", "latest", read_path="interpretation"),
+        Field("Retail sales (prior, $M)", "mc_RSAFS", "latest", read_path="interpretation"),
     )),
     Section("12", "Self-Grading & Calibration", (
         Field("Calls settled", "grade_predictions", "totals.settled"),
@@ -252,7 +320,11 @@ def render_digest(raw: dict, derived: dict, date: str, mode: str = "fr") -> str:
         "> Tables below are FINAL — built in Python from live provider results this run. "
         "Do NOT rebuild, re-order, or restate them. Every `Read` cell is either the provider's "
         "own signal or a threshold rule. Regime scores are computed, not estimated. "
-        f"`{FAIL}` = that source failed; never fill it from memory. GSCPI/last30days are EXTERNAL.",
+        f"`{FAIL}` = that source failed; never fill it from memory. "
+        f"`{NOT_MEANINGFUL}` is DIFFERENT — the provider returned the field as null "
+        "because it is not meaningful there (e.g. a percent anomaly off a near-zero "
+        "base); report it as not applicable, never as a failure. "
+        "GSCPI/last30days are EXTERNAL.",
         "",
         "**Your job:** write 2–4 sentences of interpretation under each table (what it means "
         "taken together, how it connects to the rest), plus §0 delta and §12 synthesis. "

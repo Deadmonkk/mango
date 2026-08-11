@@ -59,6 +59,33 @@ def dig(obj: Any, path: str, default: Any = None) -> Any:
         return default
 
 
+# A provider that RESOLVES a field to null is making a statement — "this figure
+# is not meaningful here" — which is not the same as the source failing. Folding
+# both into FAIL cost us a real read on 2026-08-10: NASA POWER suppresses the
+# precipitation *percentage* where the climatological base is under ~10mm (a
+# percent change off 0.6mm is noise), and the digest reported three regions as
+# "source failed" when the underlying rainfall had in fact been returned.
+NOT_MEANINGFUL = "n/a (provider returned null — not a failure)"
+
+MISSING = object()  # path did not resolve at all
+
+
+def resolve(obj: Any, path: str) -> tuple[Any, str]:
+    """Extract by path, distinguishing an explicit null from an unresolvable path.
+
+    Returns:
+        ``(value, status)`` where status is ``"ok"``, ``"null"`` (the path
+        resolved to JSON null) or ``"missing"`` (the path did not resolve).
+    """
+    cur = obj
+    try:
+        for key in path.split("."):
+            cur = cur[int(key)] if key.lstrip("-").isdigit() else cur[key]
+    except (KeyError, IndexError, TypeError, ValueError):
+        return MISSING, "missing"
+    return (None, "null") if cur is None else (cur, "ok")
+
+
 def is_num(v: Any) -> bool:
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
@@ -116,8 +143,12 @@ def fmt_value(v: Any, unit: str, decimals: int) -> str:
     return str(v)[:90]
 
 
-def render_read(raw: dict, f: Field, value: Any) -> str:
+def render_read(raw: dict, f: Field, value: Any, status: str = "ok") -> str:
     """Verdict for the Read column: provider signal first, then a rule, else blank."""
+    if status == "missing" or value is MISSING:
+        return "source failed"
+    if status == "null":
+        return "provider returned null — field not meaningful here, NOT a failure"
     if value is None:
         return "source failed"
     if f.read_path:
@@ -135,8 +166,14 @@ def render_table(raw: dict, sec: Section) -> str:
         return ""
     rows = ["| Measure | Value | Read |", "|---|---|---|"]
     for f in sec.fields:
-        val = dig(raw.get(f.source, {}), f.path)
-        rows.append(f"| {f.label} | {fmt_value(val, f.unit, f.decimals)} | {render_read(raw, f, val)} |")
+        val, status = resolve(raw.get(f.source, {}), f.path)
+        if status == "missing":
+            shown = FAIL
+        elif status == "null":
+            shown = NOT_MEANINGFUL
+        else:
+            shown = fmt_value(val, f.unit, f.decimals)
+        rows.append(f"| {f.label} | {shown} | {render_read(raw, f, val, status)} |")
     return "\n".join(rows)
 
 
@@ -508,8 +545,20 @@ def _region_row(region: dict) -> str:
     temp = region.get("temp_anomaly_c")
     temp_str = _fmt_signed(temp, REGION_TEMP_DECIMALS, "°C") if is_num(temp) else FAIL
 
+    # The provider nulls the percentage where the climatological base is tiny —
+    # a percent change off 0.6mm is noise, not signal. That is a deliberate
+    # suppression, so fall back to the absolute millimetres it DID return rather
+    # than reporting a failure that did not happen (see NOT_MEANINGFUL).
     precip = region.get("precip_anomaly_pct")
-    precip_str = _fmt_signed(precip, REGION_PRECIP_DECIMALS, "%") if is_num(precip) else FAIL
+    if is_num(precip):
+        precip_str = _fmt_signed(precip, REGION_PRECIP_DECIMALS, "%")
+    else:
+        actual, normal = region.get("total_precip_mm"), region.get("normal_precip_mm")
+        precip_str = (
+            f"{round(float(actual), 1)}mm vs {round(float(normal), 1)}mm normal (% n/a, low base)"
+            if is_num(actual) and is_num(normal)
+            else FAIL
+        )
 
     signal = region.get("signal")
     status = str(signal).strip()[:REGION_STATUS_MAX_CHARS] if signal else FAIL
