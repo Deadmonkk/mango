@@ -31,6 +31,7 @@ from fr_render import (  # noqa: E402
     fmt_asof,
     level_change,
     pct_change,
+    pct_distance,
     render_read,
 )
 
@@ -195,3 +196,23 @@ def test_rows_without_an_asof_path_are_unchanged():
 )
 def test_fmt_asof_handles_real_and_malformed_dates(raw, expected):
     assert fmt_asof(raw) == expected
+
+
+# ---------------------------------------------------------------------------
+# Distance from a moving average, not the average itself
+# ---------------------------------------------------------------------------
+
+SPY_PAYLOAD = {"sma": {"current_price": 773.24, "sma_200": 701.74}}
+
+
+def test_spy_vs_200d_reports_the_gap_not_the_average():
+    """The bug: 701.74 (the SMA) printed under a row labelled "vs 200d SMA"."""
+    computed = pct_distance("sma.current_price", "sma.sma_200")(SPY_PAYLOAD)
+
+    assert computed == pytest.approx(10.19, abs=0.01)
+    assert computed != SPY_PAYLOAD["sma"]["sma_200"]
+
+
+def test_pct_distance_returns_none_on_an_unusable_level():
+    assert pct_distance("p", "l")({"p": 5.0, "l": 0.0}) is None
+    assert pct_distance("p", "l")({"p": 5.0}) is None

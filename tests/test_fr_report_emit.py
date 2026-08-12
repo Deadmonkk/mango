@@ -276,3 +276,34 @@ def test_delta_lists_only_what_moved_and_counts_the_rest():
     assert "| CAPE |" not in table, "an unchanged metric should not take a row"
     assert "1 of 3 tracked metrics moved" in table
     assert "CAPE" in table and "HY" in table, "unchanged metrics must still be named"
+
+
+class TestDeltaCellFormatting:
+    """The delta must render a value the way its own section table renders it.
+
+    A CPI row reading "0.07%" in §1 previously appeared as "0.0737" in the §0
+    delta, which reads as a different figure. The delta is the first table in the
+    report, so a reader meets the mis-formatted version first.
+    """
+
+    def test_percent_fields_keep_their_unit_in_the_delta(self) -> None:
+        table = render_delta_table(
+            {"Core CPI m/m change": 0.21543}, {"Core CPI m/m change": 0.1}, "2026-08-11"
+        )
+
+        assert "0.2154%" in table
+        assert "| 0.2154 |" not in table
+
+    def test_delta_keeps_more_precision_than_the_section_table(self) -> None:
+        """Two spreads both shown as "2.72pp" must still reveal a move."""
+        table = render_delta_table({"HY spread": 2.7231}, {"HY spread": 2.7204}, "2026-08-11")
+
+        assert "2.7231pp" in table
+        assert "2.7204pp" in table
+
+    def test_unknown_labels_still_render(self) -> None:
+        table = render_delta_table(
+            {"Equity Regime Score": 33.2}, {"Equity Regime Score": 25.6}, "2026-08-11"
+        )
+
+        assert "33.2" in table and "25.6" in table

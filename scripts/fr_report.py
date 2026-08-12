@@ -138,6 +138,8 @@ UNIT_BREAK_LABELS: frozenset[str] = frozenset({
     "Core CPI m/m change",
     "Energy m/m change",
     "Shelter m/m change",
+    # Was the 200d SMA level (701.74) under a "vs" label; now the percent gap.
+    "SPY vs 200d SMA",
 })
 
 
@@ -223,7 +225,7 @@ def render_delta_table(current: dict, prior: dict, prior_date: str) -> str:
     unchanged = [r for r in rows if r.change == "unchanged"]
     head = [f"| Metric | {prior_date} | Now | Change |", "|---|---|---|---|"]
     body = [
-        f"| {r.label} | {_cell(r.prior)} | {_cell(r.now)} | {r.change} |"
+        f"| {r.label} | {_cell(r.prior, r.label)} | {_cell(r.now, r.label)} | {r.change} |"
         for r in moved
     ]
     foot = [
@@ -237,10 +239,29 @@ def render_delta_table(current: dict, prior: dict, prior_date: str) -> str:
     return "\n".join(head + body + foot)
 
 
-def _cell(v: Any) -> str:
+def _field_formats() -> dict[str, tuple[str, int]]:
+    """{label: (unit, decimals)} taken from the section specs themselves.
+
+    The delta used to render every value as a bare 4-decimal float, so a CPI row
+    showing "0.07%" in §1 appeared as "0.0737" in the delta and read as a
+    different figure entirely.
+    """
+    return {f.label: (f.unit, f.decimals) for sec in SECTIONS for f in sec.fields}
+
+
+_FIELD_FORMATS = _field_formats()
+
+# Deltas need more precision than a section table: two spreads both rendering as
+# "2.72pp" must still show a move. One extra place, floored at the field's own.
+_DELTA_EXTRA_DECIMALS = 2
+
+
+def _cell(v: Any, label: str = "") -> str:
+    """One delta cell, formatted the way its own section table formats it."""
     if v is None:
         return "—"
-    return fmt_value(v, "", 4)
+    unit, decimals = _FIELD_FORMATS.get(label, ("", 2))
+    return fmt_value(v, unit, decimals + _DELTA_EXTRA_DECIMALS)
 
 
 # ---------------------------------------------------------------------------
