@@ -27,19 +27,42 @@ METHOD
 2. Cross-check against the observed perp-vs-spot PREMIUM. Funding is the mechanism
    that tethers a perp to spot, so a large funding rate REQUIRES a large sustained
    premium. If weighted funding and observed basis disagree, flag rather than score.
+
+AVAILABILITY (added 2026-08-12)
+-------------------------------
+CoinGecko's ``/derivatives`` returned 429 on 2026-08-12 and the whole funding read
+failed, dropping the liquidation leg (15% of the Crypto Regime Score) out of the
+score and forcing a renormalisation. Two causes, both fixed:
+
+* this module called CoinGecko with raw ``httpx``, bypassing ``core.coingecko._fetch``
+  and therefore its rate limiter, 429 retry/backoff, and shared cache — so the BTC
+  and ETH calls each hit the API cold and doubled the rate-limit pressure;
+* there was no fallback, even though ``providers.hyperliquid`` is keyless,
+  US-reachable, and was already being called in the same request for the basis check.
+
+Hyperliquid is ONE venue, not a market-wide aggregate, so the fallback degrades
+loudly: it tags ``funding_source``, carries the CoinGecko error, and verifies its
+number against an INDEPENDENT venue's basis (Deribit) — never against Hyperliquid's
+own premium, which would be the same venue checking itself.
 """
 from __future__ import annotations
 
 import asyncio
-import json
 
 import httpx
 
 from mango.core import cache
+from mango.core.coingecko import _fetch
 from mango.core.logging import log
+from mango.providers import hyperliquid
 
 # --- thresholds (named, not inline) --------------------------------------
 MIN_CONTRACT_OI_USD = 1_000_000_000.0   # only venues with >$1B OI carry weight
+MIN_SINGLE_VENUE_OI_USD = 100_000_000.0 # the $1B floor removes dust from a ~195-
+                                        # contract aggregate; applied to the one
+                                        # venue in the fallback it would reject the
+                                        # only source available. Still a floor —
+                                        # below this the venue is too thin to score.
 OUTLIER_ABS_PCT_8H = 0.5                # beyond this per 8h a BTC quote is bad data,
                                         # not a market (worst major-venue ALTCOIN
                                         # funding observed was ~0.38%/8h)
@@ -57,7 +80,7 @@ def annualize_8h(pct_per_8h: float) -> float:
     return round(pct_per_8h * PERIODS_PER_YEAR_8H, 2)
 
 
-def _weighted_funding(contracts: list[dict]) -> dict:
+def _weighted_funding(contracts: list[dict], min_oi_usd: float = MIN_CONTRACT_OI_USD) -> dict:
     """OI-weight funding across contracts, excluding dust and out-of-band quotes."""
     kept, dropped_small, dropped_outlier = [], 0, []
     for c in contracts:
@@ -71,7 +94,7 @@ def _weighted_funding(contracts: list[dict]) -> dict:
         if abs(rate) > OUTLIER_ABS_PCT_8H:
             dropped_outlier.append((c.get("market", "?"), rate, oi))
             continue
-        if oi < MIN_CONTRACT_OI_USD:
+        if oi < min_oi_usd:
             dropped_small += 1
             continue
         kept.append((rate, oi))
@@ -129,56 +152,156 @@ async def _observed_premium(client: httpx.AsyncClient) -> dict:
     return {"venues": out, "mean_premium_pct": round(sum(prems) / len(prems), 5)}
 
 
+async def _coingecko_contracts(client: httpx.AsyncClient, symbol: str) -> tuple[list[dict], str]:
+    """This asset's perpetual contracts from CoinGecko, or ``([], reason)``.
+
+    Goes through the shared ``core.coingecko._fetch`` so it inherits the rate
+    limiter, 429 retry/backoff, and cache. The raw ``httpx.get`` this replaced had
+    none of those, so one 429 killed the read and the BTC and ETH calls each paid
+    full price against the same rate limit.
+    """
+    raw = await _fetch(client, _COINGECKO_DERIVATIVES, {})
+    if isinstance(raw, dict) and "_error" in raw:
+        return [], str(raw["_error"])
+    if not isinstance(raw, list):
+        return [], "malformed /derivatives response"
+
+    contracts = [c for c in raw if c.get("index_id") == symbol]
+    if not contracts:
+        return [], f"no {symbol} contracts in /derivatives response"
+    return contracts, ""
+
+
+async def _hyperliquid_contracts(symbol: str) -> list[dict]:
+    """The same contract shape ``_weighted_funding`` consumes, from one venue.
+
+    Hyperliquid is keyless and US-reachable, which the deepest CEX perp venues
+    (Binance, Bybit) are not. One venue is not a market-wide average — the caller
+    tags the result accordingly rather than passing it off as the aggregate.
+    """
+    data = await hyperliquid.fetch_derivatives({symbol})
+    entry = (data or {}).get(symbol) or {}
+    rates, ois = entry.get("funding_rates") or [], entry.get("open_interests") or []
+    if not rates or not ois:
+        return []
+    return [{"market": "Hyperliquid", "funding_rate": rates[0], "open_interest": ois[0]}]
+
+
+def _independent_premium(premium: dict, funding_source: str) -> float | None:
+    """Mean observed basis from venues OTHER than the one that supplied funding.
+
+    A venue's own premium cannot verify its own funding rate — that is the same
+    measurement twice, not a cross-check. Returns ``None`` when no independent
+    venue reported, so the caller can decline to claim verification.
+    """
+    others = [
+        v.get("premium_pct")
+        for v in premium.get("venues", [])
+        if v.get("venue") != funding_source and isinstance(v.get("premium_pct"), (int, float))
+    ]
+    if not others:
+        return None
+    return sum(others) / len(others)
+
+
+def _apply_cross_check(result: dict, premium: dict, funding_source: str) -> None:
+    """Attach the basis cross-check to ``result``, in place.
+
+    Funding is the mechanism tethering a perp to spot: a large rate requires a
+    sustained premium. Disagreement means one of the two is unreliable — say so
+    rather than scoring a number the basis cannot support.
+    """
+    mp = _independent_premium(premium, funding_source)
+    if mp is None:
+        result["basis_consistent"] = None
+        result["cross_check"] = (
+            f"unavailable — funding came from {funding_source} and no independent venue "
+            f"reported a basis, so this rate is not independently verified"
+        )
+        return
+
+    gap = abs(result["funding_8h_pct"] - mp)
+    venues = ", ".join(
+        str(v.get("venue")) for v in premium.get("venues", []) if v.get("venue") != funding_source
+    )
+    result["basis_consistent"] = gap <= PREMIUM_DISAGREEMENT_PP
+    result["cross_check"] = (
+        f"ok — OI-weighted funding {result['funding_8h_pct']:+.4f}%/8h vs observed "
+        f"premium {mp:+.4f}% from {venues} ({gap:.4f}pp apart)"
+        if result["basis_consistent"]
+        else f"WARNING — funding {result['funding_8h_pct']:+.4f}%/8h is not supported by "
+             f"the observed premium {mp:+.4f}% from {venues} ({gap:.4f}pp apart); "
+             f"treat as unreliable"
+    )
+
+
+_AGGREGATE_NOTE = (
+    "Open-interest-weighted across venues above the OI threshold; dust and "
+    "out-of-band quotes excluded. Historical average is ~11%/yr annualised "
+    "(~0.01%/8h). An UNWEIGHTED mean over all venues overstates this by "
+    "an order of magnitude — see module docstring."
+)
+_FALLBACK_NOTE = (
+    "FALLBACK: single-venue funding from Hyperliquid because the CoinGecko "
+    "aggregate was unavailable. One venue is not a market-wide average — the "
+    "level is directionally usable but do not read small differences from prior "
+    "aggregate readings as market moves. Historical average is ~11%/yr annualised."
+)
+
+
 async def get_btc_funding(symbol: str = "BTC") -> dict:
-    """OI-weighted perpetual funding for one asset, cross-checked against basis."""
+    """OI-weighted perpetual funding for one asset, cross-checked against basis.
+
+    Falls back to single-venue Hyperliquid data when the CoinGecko aggregate is
+    unavailable, so a provider outage degrades the reading's fidelity instead of
+    removing the funding input from the regime score entirely.
+    """
     cache_key = f"crypto_funding_{symbol}"
     cached = cache.get(cache_key)
     if cached:
         return cached
 
-    try:
-        async with httpx.AsyncClient() as client:
-            derivs_task = client.get(_COINGECKO_DERIVATIVES, timeout=30)
-            premium_task = _observed_premium(client)
-            derivs_resp, premium = await asyncio.gather(derivs_task, premium_task)
-            derivs_resp.raise_for_status()
-            all_contracts = derivs_resp.json()
-    except Exception as e:
-        log.warning("funding fetch failed: %s", e)
-        return {"error": str(e), "source": "coingecko+venues"}
+    async with httpx.AsyncClient() as client:
+        (contracts, cg_error), premium = await asyncio.gather(
+            _coingecko_contracts(client, symbol), _observed_premium(client)
+        )
 
-    contracts = [c for c in all_contracts if c.get("index_id") == symbol]
-    result = _weighted_funding(contracts)
+    funding_source = "coingecko"
+    result = (
+        _weighted_funding(contracts) if contracts else {"error": cg_error or "no contracts"}
+    )
+
     if "error" in result:
-        return {**result, "source": "coingecko+venues"}
+        log.warning("CoinGecko funding unavailable (%s); trying Hyperliquid", cg_error or result["error"])
+        single_venue = await _hyperliquid_contracts(symbol)
+        fallback = (
+            _weighted_funding(single_venue, min_oi_usd=MIN_SINGLE_VENUE_OI_USD)
+            if single_venue
+            else {"error": "hyperliquid returned no usable funding"}
+        )
+        if "error" not in fallback:
+            result, funding_source = fallback, "hyperliquid"
+        else:
+            return {
+                "error": f"coingecko: {cg_error or result['error']}; hyperliquid: {fallback['error']}",
+                "source": "coingecko+venues",
+            }
 
     result["symbol"] = symbol
     result["contracts_seen"] = len(contracts)
+    result["funding_source"] = funding_source
     result["premium_check"] = premium
-
-    # Funding is the mechanism tethering perp to spot: a large rate requires a
-    # sustained premium. Disagreement means one of the two is unreliable — say so
-    # rather than scoring a number the basis cannot support.
-    mp = premium.get("mean_premium_pct")
-    if isinstance(mp, (int, float)):
-        gap = abs(result["funding_8h_pct"] - mp)
-        result["basis_consistent"] = gap <= PREMIUM_DISAGREEMENT_PP
-        result["cross_check"] = (
-            f"ok — OI-weighted funding {result['funding_8h_pct']:+.4f}%/8h vs observed "
-            f"premium {mp:+.4f}% ({gap:.4f}pp apart)"
-            if result["basis_consistent"]
-            else f"WARNING — funding {result['funding_8h_pct']:+.4f}%/8h is not supported by "
-                 f"the observed premium {mp:+.4f}% ({gap:.4f}pp apart); treat as unreliable"
-        )
+    _apply_cross_check(result, premium, funding_source)
 
     result["signal"] = _funding_signal(result["funding_annualized_pct"])
-    result["note"] = (
-        "Open-interest-weighted across venues above the OI threshold; dust and "
-        "out-of-band quotes excluded. Historical average is ~11%/yr annualised "
-        "(~0.01%/8h). An UNWEIGHTED mean over all venues overstates this by "
-        "an order of magnitude — see module docstring."
-    )
-    result["source"] = "coingecko /derivatives (OI-weighted) + deribit/hyperliquid basis"
+    if funding_source == "hyperliquid":
+        result["note"] = _FALLBACK_NOTE
+        result["coingecko_error"] = cg_error
+        result["source"] = "hyperliquid /info (single venue) + deribit basis"
+    else:
+        result["note"] = _AGGREGATE_NOTE
+        result["source"] = "coingecko /derivatives (OI-weighted) + deribit/hyperliquid basis"
+
     cache.set(cache_key, result, CACHE_TTL_FUNDING)
     return result
 
