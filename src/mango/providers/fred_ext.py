@@ -476,7 +476,10 @@ async def get_release_calendar(days: int = 7) -> dict:
             data = resp.json()
     except Exception as e:  # noqa: BLE001
         log.warning("FRED release calendar failed: %s", e)
-        return {"error": str(e), "source": "fred"}
+        # Include the exception TYPE: a bare httpx.ConnectTimeout stringifies to
+        # "", so the report rendered "source failed" with no reason at all and
+        # the failure could not be told apart from a missing API key.
+        return {"error": f"{type(e).__name__}: {e}".strip(": "), "source": "fred"}
 
     events = []
     for row in data.get("release_dates", []):
