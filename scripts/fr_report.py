@@ -27,13 +27,13 @@ from fr_render import (
     MISSING,
     crypto_components,
     equity_components,
+    field_value,
     fmt_value,
     is_num,
     render_anomalies,
     render_region_table,
     render_score_block,
     render_table,
-    resolve,
     score,
 )
 from fr_sections import REPORT_SCHEMA_VERSION, SECTIONS, _resolve
@@ -106,7 +106,7 @@ def extract_values(raw: dict, derived: dict) -> dict[str, Any]:
     values: dict[str, Any] = {}
     for sec in SECTIONS:
         for f in sec.fields:
-            val, status = resolve(src.get(f.source, {}), f.path)
+            val, status = field_value(src.get(f.source, {}), f)
             if status != "ok" or val is MISSING:
                 values[f.label] = None
             elif isinstance(val, (int, float, str, bool)):
@@ -116,6 +116,43 @@ def extract_values(raw: dict, derived: dict) -> dict[str, Any]:
     values["Equity Regime Score"] = score(equity_components(raw, derived))[0]
     values["Crypto Regime Score"] = score(crypto_components(raw, derived))[0]
     return values
+
+
+# Label changes that are PURE RENAMES: the figure still means what it meant, so
+# the prior run's value carries over and the delta survives the rename.
+VALUE_LABEL_RENAMES: dict[str, str] = {
+    "CPI (index)": "CPI (index, SA)",
+    "Core CPI (index)": "Core CPI (index, SA)",
+    "Nonfarm payrolls": "Total nonfarm employment (level, 000s)",
+    "WTI crude": "WTI crude (Cushing spot)",
+    "Gold": "Gold (COMEX front month)",
+    "Dollar index": "Dollar index (FRED broad, Jan 2006=100 — NOT ICE DXY)",
+}
+
+# Labels whose UNITS changed in schema v3: the CPI m/m rows carry percent where
+# they used to carry index points. Diffing across that break would invent a move
+# (0.245 index points vs 0.074%, reported as a 70% drop), so the prior is dropped
+# and the row reads "—" for exactly one run.
+UNIT_BREAK_LABELS: frozenset[str] = frozenset({
+    "CPI m/m change",
+    "Core CPI m/m change",
+    "Energy m/m change",
+    "Shelter m/m change",
+})
+
+
+def migrate_prior_values(prior: dict[str, Any]) -> dict[str, Any]:
+    """Bring a prior snapshot onto the current label/unit contract.
+
+    Without this a schema change silently degrades the delta: renamed rows lose
+    their history and re-based rows report a move that never happened.
+    """
+    if not prior:
+        return {}
+    migrated = {VALUE_LABEL_RENAMES.get(k, k): v for k, v in prior.items()}
+    for label in UNIT_BREAK_LABELS:
+        migrated.pop(label, None)
+    return migrated
 
 
 def load_prior_values(brief_dir: Path, today: str) -> tuple[dict[str, Any], str]:
@@ -132,9 +169,10 @@ def load_prior_values(brief_dir: Path, today: str) -> tuple[dict[str, Any], str]
         return {}, ""
     newest = candidates[-1]
     try:
-        return json.loads(newest.read_text()), newest.stem[len(VALUES_PREFIX):]
+        raw_prior = json.loads(newest.read_text())
     except (json.JSONDecodeError, OSError):
         return {}, ""
+    return migrate_prior_values(raw_prior), newest.stem[len(VALUES_PREFIX):]
 
 
 @dataclass(frozen=True)
