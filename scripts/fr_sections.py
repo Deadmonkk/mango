@@ -15,6 +15,8 @@ from fr_render import (
     crypto_components,
     dig,
     equity_components,
+    level_change,
+    pct_change,
     render_anomalies,
     render_score_block,
     render_table,
@@ -40,17 +42,34 @@ PP = "pp"
 # with the same schema are directly comparable; different schemas are not.
 #   v1  original
 #   v2  2026-08-07 — the GDP row reports real GDP (GDPC1), not nominal (GDP)
-REPORT_SCHEMA_VERSION = 2
+#   v3  2026-08-12 — CPI m/m rows report PERCENT, not index points (they read as
+#       percent and were 3-6x the BLS print); "Nonfarm payrolls" is the monthly
+#       change, with the level moved to its own row; the dollar index names the
+#       FRED broad series so it is not read as ICE DXY; §1 and §7 carry as-of dates
+REPORT_SCHEMA_VERSION = 3
 
 SECTIONS: tuple[Section, ...] = (
     Section("1", "Macro Snapshot", (
-        Field("Real GDP", "macro_dashboard", "indicators.real_gdp.latest_value"),
-        Field("CPI (index)", "macro_dashboard", "indicators.cpi.latest_value"),
-        Field("Core CPI (index)", "macro_dashboard", "indicators.core_cpi.latest_value"),
-        Field("Unemployment", "macro_dashboard", "indicators.unemployment.latest_value", PCT),
-        Field("Initial claims", "macro_dashboard", "indicators.initial_claims.latest_value"),
-        Field("Nonfarm payrolls", "macro_dashboard", "indicators.nonfarm_payrolls.latest_value"),
-        Field("Consumer sentiment", "macro_dashboard", "indicators.consumer_sentiment.latest_value"),
+        Field("Real GDP", "macro_dashboard", "indicators.real_gdp.latest_value",
+              asof_path="indicators.real_gdp.latest_date"),
+        Field("CPI (index, SA)", "macro_dashboard", "indicators.cpi.latest_value",
+              asof_path="indicators.cpi.latest_date"),
+        Field("Core CPI (index, SA)", "macro_dashboard", "indicators.core_cpi.latest_value",
+              asof_path="indicators.core_cpi.latest_date"),
+        Field("Unemployment", "macro_dashboard", "indicators.unemployment.latest_value", PCT,
+              asof_path="indicators.unemployment.latest_date"),
+        Field("Initial claims", "macro_dashboard", "indicators.initial_claims.latest_value",
+              asof_path="indicators.initial_claims.latest_date"),
+        # The monthly CHANGE, which is what "payrolls" means in a macro report.
+        # The level is kept on the next row, explicitly labelled as a level.
+        Field("Nonfarm payrolls (m/m change, 000s)", "macro_dashboard", "",
+              value_fn=level_change("indicators.nonfarm_payrolls"),
+              asof_path="indicators.nonfarm_payrolls.latest_date"),
+        Field("Total nonfarm employment (level, 000s)", "macro_dashboard",
+              "indicators.nonfarm_payrolls.latest_value",
+              asof_path="indicators.nonfarm_payrolls.latest_date"),
+        Field("Consumer sentiment", "macro_dashboard", "indicators.consumer_sentiment.latest_value",
+              asof_path="indicators.consumer_sentiment.latest_date"),
         Field("Realized effective tariff", "_derived", "realized_tariff_pct", PCT),
         Field("Prime-age LFPR", "mc_LNS11300060", "latest", PCT, read_path="interpretation"),
         Field("Productivity (OPHNFB)", "mc_OPHNFB", "latest", read_path="interpretation"),
@@ -62,10 +81,21 @@ SECTIONS: tuple[Section, ...] = (
         Field("CPI food & beverages", "cpi_components", "indicators.cpi_food.latest_value"),
         Field("CPI core goods", "cpi_components", "indicators.cpi_core_goods.latest_value"),
         Field("CPI services ex energy", "cpi_components", "indicators.cpi_services.latest_value"),
-        Field("CPI m/m change", "cpi_components", "indicators.cpi.change"),
-        Field("Core CPI m/m change", "cpi_components", "indicators.core_cpi.change"),
-        Field("Energy m/m change", "cpi_components", "indicators.cpi_energy.change"),
-        Field("Shelter m/m change", "cpi_components", "indicators.cpi_shelter.change"),
+        # Percent, computed from the index levels. The provider's own `.change`
+        # is an INDEX-POINT delta: rendering it under an "m/m change" header
+        # read as +0.72% for a month whose actual core print was +0.2%.
+        Field("CPI m/m change", "cpi_components", "", PCT,
+              value_fn=pct_change("indicators.cpi"), decimals=2,
+              asof_path="indicators.cpi.latest_date"),
+        Field("Core CPI m/m change", "cpi_components", "", PCT,
+              value_fn=pct_change("indicators.core_cpi"), decimals=2,
+              asof_path="indicators.core_cpi.latest_date"),
+        Field("Energy m/m change", "cpi_components", "", PCT,
+              value_fn=pct_change("indicators.cpi_energy"), decimals=2,
+              asof_path="indicators.cpi_energy.latest_date"),
+        Field("Shelter m/m change", "cpi_components", "", PCT,
+              value_fn=pct_change("indicators.cpi_shelter"), decimals=2,
+              asof_path="indicators.cpi_shelter.latest_date"),
     )),
     Section("2", "Cycle Position & Recession Risk", (
         Field("Recession signals active", "cycle_position", "signals_active", read_path="verdict"),
@@ -173,10 +203,15 @@ SECTIONS: tuple[Section, ...] = (
         Field("COT gold net WoW", "cot_report_gold", "large_speculators.net_change"),
     )),
     Section("7", "Commodities, Dollar & Climate Risk", (
-        Field("WTI crude", "commodities", "indicators.wti_oil.latest_value"),
-        Field("Gold", "commodities", "indicators.gold_price.latest_value"),
-        Field("Gasoline", "commodities", "indicators.gasoline_price.latest_value"),
-        Field("Dollar index", "commodities", "indicators.dollar_index.latest_value"),
+        Field("WTI crude (Cushing spot)", "commodities", "indicators.wti_oil.latest_value",
+              asof_path="indicators.wti_oil.latest_date"),
+        Field("Gold (COMEX front month)", "commodities", "indicators.gold_price.latest_value",
+              asof_path="indicators.gold_price.latest_date"),
+        Field("Gasoline", "commodities", "indicators.gasoline_price.latest_value",
+              asof_path="indicators.gasoline_price.latest_date"),
+        Field("Dollar index (FRED broad, Jan 2006=100 — NOT ICE DXY)", "commodities",
+              "indicators.dollar_index.latest_value",
+              asof_path="indicators.dollar_index.latest_date"),
     )),
     Section("8", "Crypto Pulse", (
         Field("Total crypto mkt cap", "crypto_market_overview", "total_market_cap_usd",
@@ -271,9 +306,13 @@ EOD_SECTIONS: tuple[Section, ...] = (
         Field("10y Treasury", "rates_dashboard", "indicators.10y_yield.latest_value", PCT),
         Field("2y Treasury", "rates_dashboard", "indicators.2y_yield.latest_value", PCT),
         Field("10y real yield", "rates_dashboard", "indicators.tips_10y.latest_value", PCT),
-        Field("WTI crude", "commodities", "indicators.wti_oil.latest_value"),
-        Field("Gold", "commodities", "indicators.gold_price.latest_value"),
-        Field("Dollar index", "commodities", "indicators.dollar_index.latest_value"),
+        Field("WTI crude (Cushing spot)", "commodities", "indicators.wti_oil.latest_value",
+              asof_path="indicators.wti_oil.latest_date"),
+        Field("Gold (COMEX front month)", "commodities", "indicators.gold_price.latest_value",
+              asof_path="indicators.gold_price.latest_date"),
+        Field("Dollar index (FRED broad, Jan 2006=100 — NOT ICE DXY)", "commodities",
+              "indicators.dollar_index.latest_value",
+              asof_path="indicators.dollar_index.latest_date"),
         Field("HY spread", "credit_spreads", "indicators.hy_spread.latest_value", PP,
               read_path="indicators.hy_spread.signal"),
         Field("CCC spread", "credit_spreads", "indicators.ccc_spread.latest_value", PP),

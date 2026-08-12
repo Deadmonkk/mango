@@ -69,12 +69,19 @@ class TestSectionSevenPlacement:
         assert kept == ["1", "2", "3", "4", "5", "6", "8", "9", "10", "12"]
 
     def test_section_seven_keeps_original_commodity_fields(self) -> None:
+        """Keyed on the data path, not the label.
+
+        Labels are presentational and are deliberately revised — "Dollar index"
+        became "Dollar index (FRED broad, Jan 2006=100 — NOT ICE DXY)" in schema
+        v3 precisely because the short label was misread as ICE DXY. What must
+        not change is that §7 still sources these four series.
+        """
         sec = _section("7")
-        labels = [f.label for f in sec.fields]
-        assert "WTI crude" in labels
-        assert "Gold" in labels
-        assert "Gasoline" in labels
-        assert "Dollar index" in labels
+        paths = [f.path for f in sec.fields]
+        assert "indicators.wti_oil.latest_value" in paths
+        assert "indicators.gold_price.latest_value" in paths
+        assert "indicators.gasoline_price.latest_value" in paths
+        assert "indicators.dollar_index.latest_value" in paths
 
 
 class TestDealerGammaFieldsInSectionSix:

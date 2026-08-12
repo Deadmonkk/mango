@@ -90,6 +90,85 @@ def is_num(v: Any) -> bool:
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
 
+def field_value(payload: Any, f: "Field") -> tuple[Any, str]:
+    """Resolve one Field against its source payload.
+
+    Both the rendered table and the §0 delta snapshot go through here, so a
+    computed field cannot show one number in the table and a different one in
+    the diff that the next run compares against.
+    """
+    if f.value_fn is None:
+        return resolve(payload, f.path)
+    try:
+        v = f.value_fn(payload)
+    except (KeyError, IndexError, TypeError, ValueError, ZeroDivisionError):
+        return MISSING, "missing"
+    return (None, "null") if v is None else (v, "ok")
+
+
+def pct_change(prefix: str) -> Callable[[Any], float | None]:
+    """Percent change of an index series from its own previous observation.
+
+    FRED index series carry `latest_value`/`previous_value` in index POINTS. A
+    row labelled "m/m change" has to show percent: printing the raw index-point
+    delta invites reading +0.724 as +0.72% when the actual BLS print is +0.2%,
+    a 3.6x magnification that a reader has no way to detect from the table.
+    """
+    def fn(payload: Any) -> float | None:
+        node = dig(payload, prefix)
+        if not isinstance(node, dict):
+            raise KeyError(prefix)  # path absent -> "missing", not "null"
+        latest, previous = node.get("latest_value"), node.get("previous_value")
+        if not (is_num(latest) and is_num(previous)) or float(previous) == 0.0:
+            return None
+        return (float(latest) - float(previous)) / float(previous) * 100.0
+    return fn
+
+
+def level_change(prefix: str) -> Callable[[Any], float | None]:
+    """Absolute change of a level series from its own previous observation.
+
+    "Nonfarm payrolls" means the monthly CHANGE to every reader of a macro
+    report. The provider stores the employment LEVEL under `latest_value`, so
+    rendering that path prints 158,858 for a month in which payrolls FELL 23k.
+    """
+    def fn(payload: Any) -> float | None:
+        node = dig(payload, prefix)
+        if not isinstance(node, dict):
+            raise KeyError(prefix)  # path absent -> "missing", not "null"
+        if is_num(node.get("change")):
+            return float(node["change"])
+        latest, previous = node.get("latest_value"), node.get("previous_value")
+        if not (is_num(latest) and is_num(previous)):
+            return None
+        return float(latest) - float(previous)
+    return fn
+
+
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
+           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def fmt_asof(value: Any) -> str:
+    """An ISO observation date as a compact 'as of' label, or '' if unusable."""
+    if not isinstance(value, str):
+        return ""
+    parts = value.split("-")
+    if len(parts) < 2 or not (parts[0].isdigit() and parts[1].isdigit()):
+        return value.strip()[:20]
+    month = int(parts[1])
+    if not 1 <= month <= 12:
+        return value.strip()[:20]
+    # FRED dates monthly and quarterly observations to the 1st, so a day of "01"
+    # is an artefact rather than information: "Jun 2026", not "1 Jun 2026". A
+    # daily series that genuinely lands on the 1st loses only the day, and its
+    # month is still stated.
+    day = ""
+    if len(parts) > 2 and parts[2].isdigit() and int(parts[2]) != 1:
+        day = f"{int(parts[2])} "
+    return f"{day}{_MONTHS[month - 1]} {parts[0]}"
+
+
 def clamp(v: float, lo: float = 0.0, hi: float = PCT_MAX) -> float:
     """Bound a component score to 0-100.
 
@@ -122,6 +201,14 @@ class Field:
     read_path: str = ""  # provider's own signal/interpretation, if any
     read_fn: Callable[[Any], str] | None = None
     decimals: int = 2
+    # Derive the value from the whole source payload instead of one path. Used
+    # where the provider's stored number is not the number the label promises
+    # (an index-point delta under an "m/m change" header, an employment level
+    # under a "payrolls" header). When set, `path` is ignored for the value.
+    value_fn: Callable[[Any], Any] | None = None
+    # Path to this figure's own observation date. Rendered into the Read column
+    # so a stale series cannot masquerade as current.
+    asof_path: str = ""
 
 
 @dataclass(frozen=True)
@@ -151,13 +238,20 @@ def render_read(raw: dict, f: Field, value: Any, status: str = "ok") -> str:
         return "provider returned null — field not meaningful here, NOT a failure"
     if value is None:
         return "source failed"
+    verdict = ""
     if f.read_path:
         sig = dig(raw.get(f.source, {}), f.read_path)
         if isinstance(sig, str) and sig.strip():
-            return sig.strip()[:110]
-    if f.read_fn and is_num(value):
-        return f.read_fn(float(value))
-    return ""
+            verdict = sig.strip()[:110]
+    if not verdict and f.read_fn and is_num(value):
+        verdict = f.read_fn(float(value))
+
+    # The observation date leads, so a figure a month stale cannot read as
+    # current just because the row sits in today's report.
+    asof = fmt_asof(dig(raw.get(f.source, {}), f.asof_path)) if f.asof_path else ""
+    if not asof:
+        return verdict
+    return f"as of {asof} — {verdict}" if verdict else f"as of {asof}"
 
 
 def render_table(raw: dict, sec: Section) -> str:
@@ -166,7 +260,7 @@ def render_table(raw: dict, sec: Section) -> str:
         return ""
     rows = ["| Measure | Value | Read |", "|---|---|---|"]
     for f in sec.fields:
-        val, status = resolve(raw.get(f.source, {}), f.path)
+        val, status = field_value(raw.get(f.source, {}), f)
         if status == "missing":
             shown = FAIL
         elif status == "null":
