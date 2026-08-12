@@ -27,10 +27,12 @@ from fr_render import (
     MISSING,
     crypto_components,
     equity_components,
+    event_priors,
     field_value,
     fmt_value,
     is_num,
     render_anomalies,
+    render_event_table,
     render_region_table,
     render_score_block,
     render_table,
@@ -306,6 +308,13 @@ def build_report(
                 "### ESG & Climate Production-Risk Watch",
                 "",
                 render_region_table(raw.get("climate_risk", {})),
+                "",
+            ]
+        if number == "11":
+            out += [
+                "### This Week's High-Impact Releases",
+                "",
+                render_event_table(raw.get("release_calendar", {}), event_priors(raw)),
                 "",
             ]
         out += [_slot(f"s{number}"), ""]

@@ -686,6 +686,85 @@ def _region_row(region: dict) -> str:
     return f"| {label} | {temp_str} | {precip_str} | {status} | {exposure} |"
 
 
+def event_priors(raw: dict) -> dict[str, str]:
+    """Most recent ACTUAL reading for each calendar event, from THIS run's data.
+
+    Keys match `_HIGH_IMPACT_RELEASES` in the FRED provider. Anything without a
+    figure already gathered is simply absent, so the table renders "—" rather
+    than a guess — the §11 rule that priors are real numbers or nothing.
+    """
+    def get(source: str, path: str) -> Any:
+        value, status = resolve(raw.get(source, {}), path)
+        return value if status == "ok" else None
+
+    cpi_mom = pct_change("indicators.cpi")(raw.get("cpi_components", {})) \
+        if isinstance(raw.get("cpi_components"), dict) else None
+    payrolls = get("macro_dashboard", "indicators.nonfarm_payrolls.change")
+    unemployment = get("macro_dashboard", "indicators.unemployment.latest_value")
+    ppi = get("mc_PPIFIS", "latest")
+    retail = get("mc_RSAFS", "latest")
+    gdp = get("macro_dashboard", "indicators.real_gdp.latest_value")
+    jolts = get("jolts", "job_openings.latest_value")
+
+    out: dict[str, str] = {}
+    if is_num(cpi_mom):
+        out["CPI (inflation)"] = f"{cpi_mom:+.2f}% m/m"
+    if is_num(payrolls) and is_num(unemployment):
+        out["Jobs Report (Employment Situation)"] = (
+            f"{payrolls:+,.0f}k payrolls, {unemployment}% unemployment"
+        )
+    if is_num(ppi):
+        out["PPI (producer prices)"] = f"{ppi:,.2f} index"
+    if is_num(retail):
+        out["Retail Sales"] = f"${retail:,.0f}M"
+    if is_num(gdp):
+        out["GDP"] = f"{gdp:,.1f} (real, $bn)"
+    if is_num(jolts):
+        out["JOLTS (job openings)"] = f"{jolts:,.0f}"
+    return out
+
+
+def render_event_table(calendar: dict, priors: dict | None = None) -> str:
+    """Upcoming high-impact releases as the Event | Date | Prior table §11 wants.
+
+    Sourced from FRED's own release schedule, which aggregates the BLS, BEA and
+    Census calendars — one key the pipeline already has, rather than three
+    separate feeds. This exists because Finnhub's calendar is premium-walled on
+    this key (persistent 403) and §11 was rendering empty as a result, even
+    though this free path was already implemented and working.
+
+    `priors` maps an event name to its most recent ACTUAL reading, taken from
+    figures already gathered this run. A prior with no source renders "—";
+    it is never guessed.
+    """
+    if not isinstance(calendar, dict) or calendar.get("error"):
+        return f"Economic calendar: {FAIL}"
+    # An absent `events` key means the source never ran; an empty list means it
+    # ran and the week is genuinely quiet. Those must not read the same.
+    events = calendar.get("events")
+    if not isinstance(events, list):
+        return f"Economic calendar: {FAIL}"
+    if not events:
+        return "Economic calendar: no high-impact releases scheduled in the window."
+
+    priors = priors or {}
+    rows = ["| Event | Date | Prior |", "|---|---|---|"]
+    notes = []
+    for ev in events:
+        if not isinstance(ev, dict):
+            continue
+        name = str(ev.get("event") or "?")
+        when = str(ev.get("date") or "—")
+        prior = priors.get(name)
+        rows.append(f"| {name} | {when} | {prior if prior is not None else '—'} |")
+        why = str(ev.get("why") or "").strip()
+        if why:
+            notes.append(f"- **{name}** — {why}")
+    if len(rows) == 2:
+        return "Economic calendar: no high-impact releases scheduled in the window."
+    return "\n".join(rows + ([""] + notes if notes else []))
+
+
 def render_region_table(climate: dict) -> str:
     """Finished markdown table for the climate provider's per-region payload.
 

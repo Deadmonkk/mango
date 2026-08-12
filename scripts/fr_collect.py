@@ -269,6 +269,12 @@ TOOL_MAP_FR: dict = {
     "correlation_regime": (a(correlation_regime.get_correlation_regime), ("",), {}),
     "international_markets": (a(market_data.get_international_markets), (), {}),
     "economic_calendar": (a(finnhub.get_economic_calendar), (7,), {}),
+    # Finnhub's calendar is premium-walled on this key (persistent 403), which
+    # left §11 with no event table for months. FRED's own release schedule
+    # aggregates the BLS, BEA and Census calendars and needs only the key the
+    # pipeline already uses, so it is gathered every run rather than as a
+    # fallback nobody invokes.
+    "release_calendar": (a(fred_ext.get_release_calendar), (7,), {}),
     "cot_report_sp500": (a(cftc.get_cot_report), ("sp500",), {}),
     "cot_report_gold": (a(cftc.get_cot_report), ("gold",), {}),
     "13f_holdings_berkshire": (a(edgar.get_13f_holdings), ("berkshire", 20), {}),
