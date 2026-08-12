@@ -42,10 +42,20 @@ URL = re.compile(r"https?://\S+")
 # legitimately rounds ("−9.87%" -> "9.9%") and rescales ($306,401,459,887 ->
 # "$306.4bn"), so an exact-string test would be all false positives.
 REL_TOLERANCE = 0.002
-ABS_TOLERANCE = 0.011
+# Floor exists only to absorb float representation noise. It must stay far below
+# the precision of any written figure: at 0.011 it swallowed a whole hundredth,
+# so "0.64pp" matched a table's 0.63 and a stale figure passed the check. The
+# written precision (_half_ulp) is what should decide a match, not this.
+ABS_TOLERANCE = 1e-9
 
-# Scale factors a writer legitimately applies when quoting a table figure.
+# Scale factors a writer legitimately applies when quoting a table figure
+# ($306,401,459,887 as "$306.4bn"). Rescaling is only attempted against table
+# values at least RESCALE_FLOOR, because a rescaled quote only makes sense for a
+# genuinely large raw number. Without that gate the check silently passes almost
+# anything: "0.64pp" matched "643 months" via a 1000x scale on 2026-08-12, and
+# the tolerance had been scaled up with it.
 SCALES = (1, 1e3, 1e6, 1e9, 1e12)
+RESCALE_FLOOR = 1e6
 
 # Figures that are not drawn from this run's tables and are allowed on sight:
 # small integers used as counts and prose ("five", "three of six"), calendar
@@ -119,6 +129,7 @@ def unverified_numbers(prose: str, tables: str) -> list[str]:
             abs(abs(value) * scale - abs(t)) <= max(window * scale, abs(t) * REL_TOLERANCE)
             for t in table_values
             for scale in SCALES
+            if scale == 1 or abs(t) >= RESCALE_FLOOR
         ):
             continue
         missing.append(token)

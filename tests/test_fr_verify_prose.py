@@ -123,3 +123,49 @@ class TestNoiseSuppression:
 
     def test_http_status_codes_are_allowed(self) -> None:
         assert unverified_numbers("The calendar is premium-walled (HTTP 403).", TABLES) == []
+
+
+class TestRescaleIsNotAWildcard:
+    """Rescaling must not turn the check into a rubber stamp.
+
+    On 2026-08-12 the prose said cyclicals "thinned to 0.39pp from 0.64pp". The
+    0.64 was carried from an earlier run and appears nowhere in the tables, but
+    the check passed: it multiplied 0.64 by 1000 and matched "643 months" from an
+    unrelated Read cell, having scaled the tolerance up to ±11 as well.
+    """
+
+    TABLES_WITH_643 = (
+        "| Measure | Value | Read |\n"
+        "|---|---|---|\n"
+        "| Cyclicals vs defensives (3mo) | 0.39pp |  |\n"
+        "| Excess bond premium | -0.32pp | EBP at the 16.5th percentile of 643 months |\n"
+        "| Stablecoin supply | 306,401,459,887.04 |  |\n"
+    )
+
+    def test_a_small_figure_does_not_match_an_unrelated_count_via_scaling(self) -> None:
+        assert "0.64" in unverified_numbers("thinned to 0.39pp from 0.64pp", self.TABLES_WITH_643)
+
+    def test_the_real_figure_still_passes(self) -> None:
+        assert unverified_numbers("cyclicals lead by 0.39pp", self.TABLES_WITH_643) == []
+
+    def test_genuine_rescaling_of_a_large_value_still_passes(self) -> None:
+        """$306,401,459,887 quoted as "$306.4bn" must keep working."""
+        assert unverified_numbers("Stablecoins at $306.4bn.", self.TABLES_WITH_643) == []
+
+
+class TestPrecisionDecidesTheMatch:
+    """The written precision, not a blanket floor, decides what counts as equal."""
+
+    NEIGHBOURS = (
+        "| Measure | Value | Read |\n"
+        "|---|---|---|\n"
+        "| EFFR | 0.63% |  |\n"
+    )
+
+    def test_a_two_decimal_figure_does_not_match_its_neighbour(self) -> None:
+        """0.64 covers [0.635, 0.645); 0.63 is a different number."""
+        assert unverified_numbers("the spread was 0.64pp", self.NEIGHBOURS) == ["0.64"]
+
+    def test_a_one_decimal_figure_does_match_within_its_own_rounding(self) -> None:
+        """0.6 covers [0.55, 0.65), which does include 0.63."""
+        assert unverified_numbers("the spread was 0.6pp", self.NEIGHBOURS) == []
