@@ -22,6 +22,7 @@ invents anything: a missing value renders as the FAIL sentinel and stays missing
 """
 from __future__ import annotations
 
+import datetime as dt
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -46,6 +47,17 @@ FUNDING_CAPITULATION = -10.0    # annualised %, shorts paying longs = washed out
 FUNDING_CROWDED = 30.0          # annualised %, well above the ~11%/yr norm
 STABLE_GROWTH_STRONG_PCT = 3.0  # 30d stablecoin supply growth = dry powder
 PCT_MAX = 100.0
+
+# Staleness thresholds, in days since the OBSERVATION date, beyond which a figure
+# is probably no longer the latest published. They differ by release cadence
+# because the observation date is not the release date: FRED stamps a quarter to
+# its first month, so Q2 GDP carries 2026-04-01 and is ~133 days "old" the day it
+# is published. A flat rule would scream at every quarterly series and teach the
+# reader to ignore the flag — which is worse than no flag.
+STALE_AFTER_DAYS_DEFAULT = 15    # daily/weekly series
+STALE_AFTER_DAYS_MONTHLY = 50    # dated to month start, published ~2-3 weeks after month end
+STALE_AFTER_DAYS_QUARTERLY = 135  # dated to quarter start, first estimate ~30 days after quarter end
+STALE_TAG = "⚠️ STALE"
 
 
 def dig(obj: Any, path: str, default: Any = None) -> Any:
@@ -166,6 +178,25 @@ _MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
 
+def is_stale(value: Any, stale_after_days: int, today: dt.date | None = None) -> bool:
+    """True when an observation is old enough to probably not be the latest.
+
+    Structural, so a stale figure flags itself. Consumer sentiment sat at June's
+    49.5 through a mid-August report and only got caught by an outside reviewer;
+    nothing in the table said the row was a month behind.
+
+    An unparseable date is NOT reported stale — a formatting problem is not a
+    staleness claim, and inventing one would be its own false signal.
+    """
+    if not isinstance(value, str):
+        return False
+    try:
+        observed = dt.date.fromisoformat(value.strip()[:10])
+    except ValueError:
+        return False
+    return (today or dt.date.today()) - observed > dt.timedelta(days=stale_after_days)
+
+
 def fmt_asof(value: Any) -> str:
     """An ISO observation date as a compact 'as of' label, or '' if unusable."""
     if not isinstance(value, str):
@@ -226,6 +257,9 @@ class Field:
     # Path to this figure's own observation date. Rendered into the Read column
     # so a stale series cannot masquerade as current.
     asof_path: str = ""
+    # Days past the observation date before this row is tagged stale. Set per
+    # field because release cadence varies; see the STALE_AFTER_DAYS_* constants.
+    stale_after_days: int = STALE_AFTER_DAYS_DEFAULT
 
 
 @dataclass(frozen=True)
@@ -265,10 +299,14 @@ def render_read(raw: dict, f: Field, value: Any, status: str = "ok") -> str:
 
     # The observation date leads, so a figure a month stale cannot read as
     # current just because the row sits in today's report.
-    asof = fmt_asof(dig(raw.get(f.source, {}), f.asof_path)) if f.asof_path else ""
+    if not f.asof_path:
+        return verdict
+    raw_date = dig(raw.get(f.source, {}), f.asof_path)
+    asof = fmt_asof(raw_date)
     if not asof:
         return verdict
-    return f"as of {asof} — {verdict}" if verdict else f"as of {asof}"
+    lead = f"{STALE_TAG} as of {asof}" if is_stale(raw_date, f.stale_after_days) else f"as of {asof}"
+    return f"{lead} — {verdict}" if verdict else lead
 
 
 def render_table(raw: dict, sec: Section) -> str:

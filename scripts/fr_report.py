@@ -332,8 +332,10 @@ def build_report(
         "",
         _slot("synthesis"),
         "",
-        "### Crowd-vs-quant divergence (EXTERNAL — last30days)",
-        "",
+        # Collapsed from a subsection to a single line on 2026-08-12: the
+        # last30days sidecars returned zero parseable items three runs running,
+        # so the heading was reliably announcing its own emptiness. The line
+        # stays because "no external corroboration" is itself worth stating.
         _slot("crowd"),
         "",
         '### "Three A-pillars" fragility lens (EY framing)',

@@ -18,6 +18,7 @@ same class of defect cannot return silently.
 
 from __future__ import annotations
 
+import datetime as dt
 import sys
 from pathlib import Path
 
@@ -27,8 +28,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from fr_render import (  # noqa: E402
     FAIL,
+    STALE_AFTER_DAYS_DEFAULT,
+    STALE_AFTER_DAYS_MONTHLY,
+    STALE_AFTER_DAYS_QUARTERLY,
+    STALE_TAG,
     Field,
     event_priors,
+    is_stale,
     field_value,
     fmt_asof,
     level_change,
@@ -163,21 +169,27 @@ def test_field_value_falls_through_to_the_path_when_no_value_fn():
 
 
 def test_asof_date_leads_the_read_column():
-    f = Field("Consumer sentiment", "macro_dashboard",
-              "indicators.consumer_sentiment.latest_value",
-              asof_path="indicators.consumer_sentiment.latest_date")
+    """A fresh observation shows the date alone, with no stale tag."""
+    fresh = (dt.date.today() - dt.timedelta(days=2)).isoformat()
+    payload = {"indicators": {"x": {"latest_date": fresh}}}
+    f = Field("x", "s", "indicators.x.v", asof_path="indicators.x.latest_date")
 
-    read = render_read({"macro_dashboard": MACRO_PAYLOAD}, f, 49.5)
+    read = render_read({"s": payload}, f, 49.5)
 
-    assert read == "as of Jun 2026"
+    assert read.startswith("as of ")
+    assert STALE_TAG not in read
 
 
 def test_asof_date_prefixes_an_existing_verdict_without_replacing_it():
-    payload = {"indicators": {"x": {"latest_date": "2026-07-01", "signal": "tight"}}}
+    fresh = (dt.date.today() - dt.timedelta(days=2)).isoformat()
+    payload = {"indicators": {"x": {"latest_date": fresh, "signal": "tight"}}}
     f = Field("x", "s", "indicators.x.v", read_path="indicators.x.signal",
               asof_path="indicators.x.latest_date")
 
-    assert render_read({"s": payload}, f, 1.0) == "as of Jul 2026 — tight"
+    read = render_read({"s": payload}, f, 1.0)
+
+    assert read.startswith("as of ")
+    assert read.endswith(" — tight")
 
 
 def test_rows_without_an_asof_path_are_unchanged():
@@ -280,3 +292,53 @@ def test_event_priors_are_drawn_only_from_this_run():
 
 def test_event_priors_are_empty_when_nothing_was_gathered():
     assert event_priors({}) == {}
+
+
+# ---------------------------------------------------------------------------
+# Auto-stale flags
+# ---------------------------------------------------------------------------
+
+TODAY = dt.date(2026, 8, 12)
+
+
+def test_a_month_old_monthly_series_flags_itself():
+    """Consumer sentiment sat at June's value in a mid-August report uncaught."""
+    assert is_stale("2026-06-01", STALE_AFTER_DAYS_MONTHLY, TODAY) is True
+
+
+def test_a_current_monthly_series_does_not_flag():
+    assert is_stale("2026-07-01", STALE_AFTER_DAYS_MONTHLY, TODAY) is False
+
+
+def test_a_freshly_published_quarter_does_not_flag():
+    """Q2 is stamped 2026-04-01 and is ~133 days 'old' the day it is published.
+
+    A flat day-count rule would scream at every quarterly series and train the
+    reader to ignore the tag.
+    """
+    assert is_stale("2026-04-01", STALE_AFTER_DAYS_QUARTERLY, TODAY) is False
+    assert is_stale("2026-04-01", STALE_AFTER_DAYS_DEFAULT, TODAY) is True  # the naive rule
+
+
+def test_daily_series_flag_only_after_the_default_window():
+    assert is_stale("2026-08-07", STALE_AFTER_DAYS_DEFAULT, TODAY) is False
+    assert is_stale("2026-07-01", STALE_AFTER_DAYS_DEFAULT, TODAY) is True
+
+
+def test_an_unparseable_date_is_never_reported_stale():
+    """A formatting problem is not a staleness claim."""
+    assert is_stale("garbage", 15, TODAY) is False
+    assert is_stale(None, 15, TODAY) is False
+    assert is_stale(42, 15, TODAY) is False
+
+
+def test_stale_rows_carry_the_tag_in_the_read_column():
+    payload = {"indicators": {"x": {"latest_date": "2026-06-01"}}}
+    f = Field("Consumer sentiment", "s", "indicators.x.v",
+              asof_path="indicators.x.latest_date",
+              stale_after_days=STALE_AFTER_DAYS_MONTHLY)
+
+    read = render_read({"s": payload}, f, 49.5)
+
+    assert read.startswith(STALE_TAG)
+    assert "as of Jun 2026" in read
