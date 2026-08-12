@@ -204,6 +204,14 @@ _EY_GAP_SERIES = [
     "IMPGS",
     "LNS11300060",
     "OPHNFB",
+    # Funding plumbing and leverage, added 2026-08-12. HY spreads can sit tight
+    # while funding markets seize (Aug 2007), and NFCI is slow — SOFR above EFFR
+    # is reserve scarcity showing up first. Margin debt is the leverage build
+    # that makes an unwind faster; FINRA's own series is not on FRED (a `MARGIN`
+    # series ID 400s), so this is the Z.1 broker-dealer receivable.
+    "SOFR",
+    "EFFR",
+    "BOGZ1FL663067003Q",
 ]
 
 TOOL_MAP_FR: dict = {
@@ -333,6 +341,16 @@ def derive(raw: dict) -> dict:
     d["net_liquidity_b"] = dig(raw.get("liquidity", {}), "net_liquidity_proxy_billions", FAIL)
     # Equity risk premium from valuation payload (already computed there)
     d["erp_pp"] = dig(raw.get("market_valuation", {}), "equity_risk_premium_pct", FAIL)
+    # SOFR - EFFR: secured overnight funding against the unsecured policy rate.
+    # Persistently positive means dealers are paying up for cash against
+    # collateral — reserve scarcity, which shows here before it reaches NFCI.
+    sofr = dig(raw.get("mc_SOFR", {}), "latest", None)
+    effr = dig(raw.get("mc_EFFR", {}), "latest", None)
+    d["sofr_minus_effr_bp"] = (
+        round((sofr - effr) * 100, 1)
+        if isinstance(sofr, (int, float)) and isinstance(effr, (int, float))
+        else FAIL
+    )
     return d
 
 

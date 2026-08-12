@@ -10,6 +10,8 @@ from __future__ import annotations
 from fr_render import (
     FAIL,
     NOT_MEANINGFUL,
+    STALE_AFTER_DAYS_MONTHLY,
+    STALE_AFTER_DAYS_QUARTERLY,
     Field,
     Section,
     crypto_components,
@@ -49,30 +51,55 @@ PP = "pp"
 #       percent and were 3-6x the BLS print); "Nonfarm payrolls" is the monthly
 #       change, with the level moved to its own row; the dollar index names the
 #       FRED broad series so it is not read as ICE DXY; §1 and §7 carry as-of dates
-REPORT_SCHEMA_VERSION = 3
+#   v4  2026-08-12 — §3 gains margin debt, §4 gains SOFR/EFFR and their spread;
+#       stale observations self-tag in the Read column
+REPORT_SCHEMA_VERSION = 4
+
+# SOFR above EFFR means secured overnight cash is bidding above the unsecured
+# policy rate — dealers paying up for cash against collateral. A few bp is noise;
+# a persistent gap is reserve scarcity, and it shows here before NFCI moves.
+SOFR_EFFR_WATCH_BP = 5.0
+SOFR_EFFR_STRESS_BP = 15.0
+
+
+def _funding_stress_read(v: float) -> str:
+    if v >= SOFR_EFFR_STRESS_BP:
+        return f"{v:+.1f}bp — secured funding well above the policy rate: reserve scarcity"
+    if v >= SOFR_EFFR_WATCH_BP:
+        return f"{v:+.1f}bp — secured funding above the policy rate, worth watching"
+    if v <= -SOFR_EFFR_WATCH_BP:
+        return f"{v:+.1f}bp — secured below unsecured: ample collateral, no funding stress"
+    return f"{v:+.1f}bp — in line with the policy rate: funding markets calm"
 
 SECTIONS: tuple[Section, ...] = (
     Section("1", "Macro Snapshot", (
         Field("Real GDP", "macro_dashboard", "indicators.real_gdp.latest_value",
-              asof_path="indicators.real_gdp.latest_date"),
+              asof_path="indicators.real_gdp.latest_date",
+              stale_after_days=STALE_AFTER_DAYS_QUARTERLY),
         Field("CPI (index, SA)", "macro_dashboard", "indicators.cpi.latest_value",
-              asof_path="indicators.cpi.latest_date"),
+              asof_path="indicators.cpi.latest_date",
+              stale_after_days=STALE_AFTER_DAYS_MONTHLY),
         Field("Core CPI (index, SA)", "macro_dashboard", "indicators.core_cpi.latest_value",
-              asof_path="indicators.core_cpi.latest_date"),
+              asof_path="indicators.core_cpi.latest_date",
+              stale_after_days=STALE_AFTER_DAYS_MONTHLY),
         Field("Unemployment", "macro_dashboard", "indicators.unemployment.latest_value", PCT,
-              asof_path="indicators.unemployment.latest_date"),
+              asof_path="indicators.unemployment.latest_date",
+              stale_after_days=STALE_AFTER_DAYS_MONTHLY),
         Field("Initial claims", "macro_dashboard", "indicators.initial_claims.latest_value",
               asof_path="indicators.initial_claims.latest_date"),
         # The monthly CHANGE, which is what "payrolls" means in a macro report.
         # The level is kept on the next row, explicitly labelled as a level.
         Field("Nonfarm payrolls (m/m change, 000s)", "macro_dashboard", "",
               value_fn=level_change("indicators.nonfarm_payrolls"),
-              asof_path="indicators.nonfarm_payrolls.latest_date"),
+              asof_path="indicators.nonfarm_payrolls.latest_date",
+              stale_after_days=STALE_AFTER_DAYS_MONTHLY),
         Field("Total nonfarm employment (level, 000s)", "macro_dashboard",
               "indicators.nonfarm_payrolls.latest_value",
-              asof_path="indicators.nonfarm_payrolls.latest_date"),
+              asof_path="indicators.nonfarm_payrolls.latest_date",
+              stale_after_days=STALE_AFTER_DAYS_MONTHLY),
         Field("Consumer sentiment", "macro_dashboard", "indicators.consumer_sentiment.latest_value",
-              asof_path="indicators.consumer_sentiment.latest_date"),
+              asof_path="indicators.consumer_sentiment.latest_date",
+              stale_after_days=STALE_AFTER_DAYS_MONTHLY),
         Field("Realized effective tariff", "_derived", "realized_tariff_pct", PCT),
         Field("Prime-age LFPR", "mc_LNS11300060", "latest", PCT, read_path="interpretation"),
         Field("Productivity (OPHNFB)", "mc_OPHNFB", "latest", read_path="interpretation"),
@@ -89,16 +116,20 @@ SECTIONS: tuple[Section, ...] = (
         # read as +0.72% for a month whose actual core print was +0.2%.
         Field("CPI m/m change", "cpi_components", "", PCT,
               value_fn=pct_change("indicators.cpi"), decimals=2,
-              asof_path="indicators.cpi.latest_date"),
+              asof_path="indicators.cpi.latest_date",
+              stale_after_days=STALE_AFTER_DAYS_MONTHLY),
         Field("Core CPI m/m change", "cpi_components", "", PCT,
               value_fn=pct_change("indicators.core_cpi"), decimals=2,
-              asof_path="indicators.core_cpi.latest_date"),
+              asof_path="indicators.core_cpi.latest_date",
+              stale_after_days=STALE_AFTER_DAYS_MONTHLY),
         Field("Energy m/m change", "cpi_components", "", PCT,
               value_fn=pct_change("indicators.cpi_energy"), decimals=2,
-              asof_path="indicators.cpi_energy.latest_date"),
+              asof_path="indicators.cpi_energy.latest_date",
+              stale_after_days=STALE_AFTER_DAYS_MONTHLY),
         Field("Shelter m/m change", "cpi_components", "", PCT,
               value_fn=pct_change("indicators.cpi_shelter"), decimals=2,
-              asof_path="indicators.cpi_shelter.latest_date"),
+              asof_path="indicators.cpi_shelter.latest_date",
+              stale_after_days=STALE_AFTER_DAYS_MONTHLY),
     )),
     Section("2", "Cycle Position & Recession Risk", (
         Field("Recession signals active", "cycle_position", "signals_active", read_path="verdict"),
@@ -125,6 +156,12 @@ SECTIONS: tuple[Section, ...] = (
         Field("Personal saving rate", "mc_PSAVERT", "latest", PCT, read_path="interpretation"),
         Field("Real weekly earnings", "mc_LES1252881600Q", "latest", read_path="interpretation"),
         Field("Revolving credit", "mc_REVOLSL", "latest", read_path="interpretation"),
+        # Leverage build: margin debt rising into a bottom-decile saving rate is
+        # what makes the unwind fast. FINRA's own series is not on FRED, so this
+        # is the Z.1 broker-dealer customer receivable (quarterly).
+        Field("Margin debt ($M, Z.1 broker-dealer)", "mc_BOGZ1FL663067003Q", "latest",
+              read_path="interpretation", asof_path="latest_date",
+              stale_after_days=STALE_AFTER_DAYS_QUARTERLY),
         Field("GZ credit spread (1973+)", "gz_credit", "gz_spread.latest", PP),
         Field("GZ spread percentile", "gz_credit", "gz_spread.percentile_since_start", PCT),
         Field("Excess bond premium", "gz_credit", "excess_bond_premium.latest", PP,
@@ -155,6 +192,13 @@ SECTIONS: tuple[Section, ...] = (
         Field("Fed path implied rate", "fed_path", "front_month_implied_rate_pct", PCT,
               read_path="signal"),
         Field("Priced change to horizon", "fed_path", "end_of_horizon_change_bp", "bp"),
+        # Funding plumbing. HY spreads can sit tight while funding markets seize
+        # (Aug 2007), and NFCI is slow — SOFR bidding above EFFR is reserve
+        # scarcity showing up first.
+        Field("SOFR", "mc_SOFR", "latest", PCT),
+        Field("EFFR", "mc_EFFR", "latest", PCT),
+        Field("SOFR − EFFR", "_derived", "sofr_minus_effr_bp", "bp",
+              read_fn=_funding_stress_read),
     )),
     Section("5", "Valuation", (
         Field("Shiller CAPE", "market_valuation", "cape.latest", read_path="cape.interpretation"),
