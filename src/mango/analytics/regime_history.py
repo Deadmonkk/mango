@@ -96,7 +96,15 @@ async def get_regime_history(forward_days: int = 30) -> dict:
         buckets: dict[str, list[float]] = {}
         matured = 0
         pending = 0
+        degraded = 0
         for snap in snapshots:
+            # A score computed on a fallback or renormalised leg can sit in a
+            # different band than the same market would produce on clean data,
+            # so it cannot be pooled with clean runs. Counted, not silently
+            # dropped — the reader should see how much was excluded.
+            if str(snap.get("data_quality", "")).lower() == "degraded":
+                degraded += 1
+                continue
             score = snap.get(score_key)
             if score is None:
                 continue
@@ -131,6 +139,7 @@ async def get_regime_history(forward_days: int = 30) -> dict:
             "forward_symbol": label,
             "matured_samples": matured,
             "pending_samples": pending,
+            "excluded_degraded_samples": degraded,
             "by_band": band_summary,
         }
 
