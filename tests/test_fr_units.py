@@ -26,12 +26,15 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from fr_render import (  # noqa: E402
+    FAIL,
     Field,
+    event_priors,
     field_value,
     fmt_asof,
     level_change,
     pct_change,
     pct_distance,
+    render_event_table,
     render_read,
 )
 
@@ -216,3 +219,64 @@ def test_spy_vs_200d_reports_the_gap_not_the_average():
 def test_pct_distance_returns_none_on_an_unusable_level():
     assert pct_distance("p", "l")({"p": 5.0, "l": 0.0}) is None
     assert pct_distance("p", "l")({"p": 5.0}) is None
+
+
+# ---------------------------------------------------------------------------
+# §11 economic calendar (FRED release schedule, replacing the 403'd Finnhub)
+# ---------------------------------------------------------------------------
+
+CALENDAR = {
+    "events": [
+        {"date": "2026-08-13", "event": "PPI (producer prices)", "impact": "high",
+         "why": "pipeline inflation; feeds CPI with a lag"},
+        {"date": "2026-08-14", "event": "Retail Sales", "impact": "high",
+         "why": "consumer spending — the largest component of GDP"},
+    ]
+}
+
+
+def test_event_table_renders_event_date_prior():
+    table = render_event_table(CALENDAR, {"Retail Sales": "$768,553M"})
+
+    assert "| Event | Date | Prior |" in table
+    assert "| Retail Sales | 2026-08-14 | $768,553M |" in table
+    # No prior gathered for PPI in this call -> em dash, never a guess.
+    assert "| PPI (producer prices) | 2026-08-13 | — |" in table
+
+
+def test_event_table_carries_the_why_line_per_event():
+    table = render_event_table(CALENDAR)
+
+    assert "**Retail Sales** — consumer spending" in table
+
+
+def test_event_table_degrades_loudly_when_the_source_failed():
+    assert FAIL in render_event_table({"error": "no key"})
+    assert FAIL in render_event_table({})
+
+
+def test_event_table_says_so_when_the_window_is_genuinely_empty():
+    """An empty window is not a failure and must not read as one."""
+    out = render_event_table({"events": []})
+
+    assert FAIL not in out
+    assert "no high-impact releases" in out
+
+
+def test_event_priors_are_drawn_only_from_this_run():
+    raw = {
+        "cpi_components": CPI_PAYLOAD,
+        "macro_dashboard": MACRO_PAYLOAD,
+        "mc_RSAFS": {"latest": 768553.0},
+    }
+    priors = event_priors(raw)
+
+    # The event is headline CPI, so the prior is headline (+0.07%), not core.
+    assert priors["CPI (inflation)"] == "+0.07% m/m"
+    assert priors["Retail Sales"] == "$768,553M"
+    # PPI was not gathered here, so it is absent rather than invented.
+    assert "PPI (producer prices)" not in priors
+
+
+def test_event_priors_are_empty_when_nothing_was_gathered():
+    assert event_priors({}) == {}

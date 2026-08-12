@@ -15,10 +15,12 @@ from fr_render import (
     crypto_components,
     dig,
     equity_components,
+    event_priors,
     level_change,
     pct_change,
     pct_distance,
     render_anomalies,
+    render_event_table,
     render_score_block,
     render_table,
 )
@@ -382,6 +384,13 @@ def render_digest(raw: dict, derived: dict, date: str, mode: str = "fr") -> str:
                 "### ESG & Climate Production-Risk Watch",
                 "",
                 render_region_table(raw.get("climate_risk", {})),
+                "",
+            ]
+        if is_fr and sec.number == "11":
+            out += [
+                "### This Week's High-Impact Releases",
+                "",
+                render_event_table(raw.get("release_calendar", {}), event_priors(raw)),
                 "",
             ]
 
