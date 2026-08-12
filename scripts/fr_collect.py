@@ -214,6 +214,20 @@ _EY_GAP_SERIES = [
     "BOGZ1FL663067003Q",
 ]
 
+# CANONICAL SOURCE MAP — the single source of truth for what feeds the FR report.
+#
+# Each key is the payload name the report's Field specs resolve against
+# (fr_sections.py), and each value is (provider coroutine, args, kwargs). The map
+# is grouped by report section with counts, so a section's inputs can be read off
+# directly.
+#
+# It maps to PROVIDERS, not to raw series IDs: which FRED/Yahoo/CoinGecko series a
+# provider pulls lives inside that provider, where it is fetched and validated.
+# Do NOT maintain a parallel hand-written "section -> series ID" table anywhere.
+# One was circulated on 2026-08-12 listing series that do not exist (`GDPNOW` is an
+# Atlanta Fed nowcast, not a FRED series) or that this pipeline does not use, and a
+# session following it would have rewired the collector to nothing. A duplicated
+# map drifts from the code the moment either changes; this file does not.
 TOOL_MAP_FR: dict = {
     # --- Crypto (16) ---
     "crypto_market_overview": (a(coingecko.get_crypto_market_overview), (), {}),
