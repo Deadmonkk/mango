@@ -35,6 +35,7 @@ async def record_snapshot(
     claims_k: float | None = None,
     fed_path: str = "",
     notes: str = "",
+    data_quality: str = "",
     snapshot_date: str = "",
 ) -> dict:
     """Record one report snapshot for later calibration.
@@ -42,13 +43,21 @@ async def record_snapshot(
     Only pass values that came from a tool result in this run. A snapshot is
     what the regime-score calibration is later measured against, so a filled-in
     number corrupts the record permanently.
+
+    Set ``data_quality="degraded"`` when a SCORED input fell back to a lesser
+    source or dropped out entirely — a renormalised leg, or a single-venue
+    funding read standing in for the market-wide aggregate. Such a score can
+    cross a band boundary on data quality alone (observed three times on
+    2026-08-12), so calibration must be able to exclude it rather than treat it
+    as equivalent to a clean run. Leave empty for a clean run.
     """
     return history.record_snapshot(
         equity_regime=equity_regime, crypto_regime=crypto_regime, btc=btc, eth=eth,
         fear_greed=fear_greed, spx=spx, vix=vix, ten_year=ten_year, hy_spread=hy_spread,
         gold=gold, wti=wti, dxy=dxy, stablecoin_supply_b=stablecoin_supply_b,
         btc_etf_flow_m=btc_etf_flow_m, cpi_mom=cpi_mom, claims_k=claims_k,
-        fed_path=fed_path, notes=notes, snapshot_date=snapshot_date,
+        fed_path=fed_path, notes=notes, data_quality=data_quality,
+        snapshot_date=snapshot_date,
     )
 
 
