@@ -145,6 +145,23 @@ def level_change(prefix: str) -> Callable[[Any], float | None]:
     return fn
 
 
+def pct_distance(price_path: str, level_path: str) -> Callable[[Any], float | None]:
+    """Percent distance of a price from a moving average.
+
+    A row labelled "vs 200d SMA" has to answer "by how much". Rendering the SMA
+    level under it printed 701.74 next to a price of 773.24 — the denominator
+    where the reader expects the gap. The crypto section already reports this as
+    `distance_from_200d_ma_pct`; this brings the equity section into line.
+    """
+    def fn(payload: Any) -> float | None:
+        price = dig(payload, price_path)
+        level = dig(payload, level_path)
+        if not (is_num(price) and is_num(level)) or float(level) == 0.0:
+            return None
+        return (float(price) - float(level)) / float(level) * 100.0
+    return fn
+
+
 _MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
