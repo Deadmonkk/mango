@@ -280,12 +280,19 @@ def crypto_components(raw: dict, derived: dict) -> list[Component]:
 
     growth = dig(raw.get("stablecoins", {}), "supply_change_30d_pct")
     funding = dig(raw.get("crypto_funding", {}), "funding_annualized_pct")
+    # The funding provider falls back to one venue when the CoinGecko aggregate is
+    # down. The number still scores, but the driver line must not call a
+    # single-venue reading an OI-weighted, basis-checked aggregate.
+    funding_src = dig(raw.get("crypto_funding", {}), "funding_source")
+    funding_qual = (
+        "single-venue fallback" if funding_src == "hyperliquid" else "OI-weighted"
+    )
     legs = [lerp_score(float(growth), -STABLE_GROWTH_STRONG_PCT, STABLE_GROWTH_STRONG_PCT)] if is_num(growth) else []
     if is_num(funding):
         legs.append(lerp_score(float(funding), FUNDING_CROWDED, FUNDING_CAPITULATION))
     out.append(Component("Stress & dry powder", 0.20,
                          sum(legs) / len(legs) if legs else None,
-                         f"stables 30d {growth}%, BTC funding {funding}%/yr (OI-weighted)"))
+                         f"stables 30d {growth}%, BTC funding {funding}%/yr ({funding_qual})"))
 
     fg = dig(raw.get("fear_greed", {}), "current.value")
     out.append(Component("Pessimism", 0.20,
@@ -294,7 +301,7 @@ def crypto_components(raw: dict, derived: dict) -> list[Component]:
 
     out.append(Component("Liquidation/vol regime", 0.15,
                          lerp_score(float(funding), FUNDING_CROWDED, FUNDING_CAPITULATION) if is_num(funding) else None,
-                         f"BTC funding {funding}%/yr (OI-weighted, basis-checked)"))
+                         f"BTC funding {funding}%/yr ({funding_qual}, basis-checked)"))
 
     rsi = dig(raw.get("crypto_technicals_BTC", {}), "momentum.rsi_14")
     dist = dig(raw.get("crypto_technicals_BTC", {}), "moving_averages.distance_from_200d_ma_pct")
