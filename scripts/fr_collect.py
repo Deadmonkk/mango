@@ -212,6 +212,12 @@ _EY_GAP_SERIES = [
     "SOFR",
     "EFFR",
     "BOGZ1FL663067003Q",
+    # Headline participation (16+), added 2026-08-14 alongside the prime-age cut
+    # already here. Prime-age strips out the retirement drift and is the better
+    # slack read, but it cannot distinguish a payroll contraction where people
+    # are LEAVING the workforce from one that is only a hiring freeze — the
+    # headline rate quoted with the jobs release is what settles that.
+    "CIVPART",
 ]
 
 # CANONICAL SOURCE MAP — the single source of truth for what feeds the FR report.

@@ -101,6 +101,10 @@ SECTIONS: tuple[Section, ...] = (
               asof_path="indicators.consumer_sentiment.latest_date",
               stale_after_days=STALE_AFTER_DAYS_MONTHLY),
         Field("Realized effective tariff", "_derived", "realized_tariff_pct", PCT),
+        # Headline first, then the prime-age cut: the two diverge on demographics,
+        # and the pair is what separates workforce exit from a hiring freeze.
+        Field("Labor force participation (16+)", "mc_CIVPART", "latest", PCT,
+              read_path="interpretation"),
         Field("Prime-age LFPR", "mc_LNS11300060", "latest", PCT, read_path="interpretation"),
         Field("Productivity (OPHNFB)", "mc_OPHNFB", "latest", read_path="interpretation"),
         # Composition, not just the headline: an energy-led fall and a broad

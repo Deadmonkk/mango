@@ -97,6 +97,11 @@ _SYMBOL_TO_COIN_ID: dict[str, str] = {
     "TRX": "tron",
     "UNI": "uniswap",
     "ATOM": "cosmos",
+    # Non-obvious slugs: the lowercase-ticker fallback resolves to
+    # "render"/"ondo", which are 404s on CoinGecko, so get_crypto_deep failed
+    # for them until they were mapped explicitly.
+    "RENDER": "render-token",
+    "ONDO": "ondo-finance",
 }
 
 

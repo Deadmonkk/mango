@@ -22,7 +22,14 @@ async def get_crypto(symbol: str) -> dict:
 @tool
 async def get_crypto_batch(symbols: str) -> dict:
     """Quotes for several cryptocurrencies at once. Comma-separated."""
-    return await coingecko.get_crypto_batch(csv_symbols(symbols))
+    # The provider returns a bare list, but FastMCP derives this tool's output
+    # schema from the `-> dict` annotation and rejected every call with a
+    # validation error. Wrapping under a key (same shape as get_quotes_batch)
+    # fixes it without changing the provider, whose bare-list contract
+    # fr_collect.py and the provider tests both depend on. Annotating the tool
+    # `-> list[dict]` would NOT work: the @tool wrapper's error path returns a
+    # dict, so a list-annotated tool fails validation the moment it errors.
+    return {"quotes": await coingecko.get_crypto_batch(csv_symbols(symbols))}
 
 
 @tool
