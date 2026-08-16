@@ -6,6 +6,13 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Least privilege for GITHUB_TOKEN. Without this block the token inherits the
+# repository default, which for repos created before Feb 2023 is read-WRITE —
+# so a compromised dependency or action in this workflow could push commits.
+# These tests only need to read the checked-out code.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
