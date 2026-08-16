@@ -241,7 +241,13 @@ SECTIONS: tuple[Section, ...] = (
         Field("SPY vs 200d", "technicals_SPY", "", PCT,
               value_fn=pct_distance("sma.current_price", "sma.sma_200"),
               read_path="overall_signal"),
-        Field("SPY MACD", "technicals_SPY", "macd.histogram", read_path="macd.signal"),
+        # Label says histogram because the value IS the histogram (macd_line minus
+        # signal_line), not the MACD line — which is ~4x larger. Labelled "SPY MACD"
+        # until 2026-08-16, where an external review caught it: a reader comparing
+        # against a charting package's "MACD" would have seen a 4x discrepancy and
+        # concluded the pipeline was wrong. The histogram is the right value to
+        # carry (its zero-cross is the signal); only the name was wrong.
+        Field("SPY MACD histogram", "technicals_SPY", "macd.histogram", read_path="macd.signal"),
         Field("SPY ATR(14)", "technicals_SPY", "atr.atr"),
         Field("Net dealer gamma (SPY)", "dealer_gamma_SPY", "net_dealer_gamma",
               read_path="signal"),
