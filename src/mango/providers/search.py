@@ -22,6 +22,8 @@ from typing import Any
 
 import httpx
 
+from mango.core import http
+
 from mango.core import cache
 from mango.core.env import load_env
 from mango.core.limiter import RateLimiter
@@ -135,14 +137,13 @@ def _shape_brave_news_results(payload: dict) -> list[dict[str, Any]]:
 
 async def _fetch_brave(client: httpx.AsyncClient, query: str, count: int) -> dict:
     await _brave_limiter.acquire()
-    response = await client.get(
+    return await http.fetch_json(
         BRAVE_BASE_URL,
+        client=client,
         params={"q": query, "count": count},
         headers={"X-Subscription-Token": BRAVE_API_KEY, "Accept": "application/json"},
         timeout=REQUEST_TIMEOUT_SECONDS,
     )
-    response.raise_for_status()
-    return response.json()
 
 
 async def _search_brave(query: str, count: int) -> dict | None:

@@ -11,6 +11,8 @@ import asyncio
 import re
 
 import httpx
+
+from mango.core import http
 from mango.core.logging import log
 
 from mango.core import cache
@@ -42,10 +44,7 @@ def _parse_multpl_table(html: str) -> list[tuple[str, float]]:
 async def _fetch_multpl_values(url: str) -> list[float] | None:
     """Newest-first monthly values from a multpl.com table, or None if unavailable."""
     try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            resp = await client.get(url, headers=_html.BROWSER_HEADERS, timeout=15)
-            resp.raise_for_status()
-            page_html = resp.text
+        page_html = await http.fetch_text(url, headers=_html.BROWSER_HEADERS, timeout=15)
     except httpx.HTTPError as e:
         log.warning("Valuation: multpl fetch failed for %s: %s", url, e)
         return None

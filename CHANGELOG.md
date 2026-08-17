@@ -3,6 +3,103 @@
 Entries that change what a number *means* are listed first in each release,
 because those are the ones that make two reports incomparable.
 
+## 2026-08-17
+
+**No figure moves in this release.** Every change below is transport,
+caching or labelling; no series was swapped, rescaled or re-derived, so
+reports before and after remain directly comparable.
+
+### Added
+
+- **`core/http.py` — one outbound-HTTP policy for every provider.** FR fans
+  out to ~70 sources; at even a 2% per-source failure rate the chance all 70
+  succeed is `0.98**70` ≈ 24%, so most runs showed at least one
+  `data unavailable (source failed)` row. Measured on 2026-08-17, the FRED
+  release-calendar endpoint failed 1 call in 6 with a bare `ReadTimeout` and
+  succeeded on the next attempt — a dropped packet, not an outage. Resilience
+  was previously a property of each provider rather than of the platform: of
+  19 provider modules only three retried anything, so one lost packet against
+  any of the other 16 became a permanent gap in the report. `fetch_json()` /
+  `fetch_text()` now own timeout, retry, exponential backoff with jitter, and
+  `Retry-After`, and all 16 remaining providers were migrated onto them
+  (16 migrated + 3 allowlisted = the 19 modules that make outbound calls).
+
+  Retries are classified, never blind: `ConnectTimeout`, `ReadTimeout`,
+  connection resets and `429/500/502/503/504` are retried; `400/401/403/404`
+  and malformed JSON are not, because no number of attempts fixes them and
+  hammering a premium-walled 403 burns quota that `core/usage_tracker.py`
+  counts against a hard free-tier ceiling.
+
+  The layer does **not** swallow errors. It re-raises after the final attempt,
+  because providers already convert exceptions to `{"error": ...}` payloads
+  and `scripts/fr_collect.py:safe()` already guarantees a failed source cannot
+  abort a run. Degrading loudly stays the contract; this only stops TRANSIENT
+  blips from becoming degradations.
+
+- **`tests/test_http_convention.py` — the boundary is enforced, not documented.**
+  Walks every provider's AST and fails if one issues a raw request or handles a
+  raw response (`raise_for_status()` is the tell). Constructing an
+  `httpx.AsyncClient` stays legal — pooling is good, and the client can be
+  handed to `fetch_json(..., client=...)` — so the rule targets the
+  architectural boundary rather than a particular call. `coingecko`,
+  `crypto_funding` and `finnhub` are allowlisted with reasons; a second test
+  asserts those modules still exist so a rename cannot silently exempt one.
+
+- **`cache.get_stale()`** — reads an entry even when expired, returning its age,
+  and deliberately does not delete it (`get()` does). Lets a source serve a
+  known-old answer, labelled, instead of nothing.
+
+### Changed — internal
+
+- **The economic calendar can no longer report a quiet week as a failure.**
+  §11 now renders four distinct states: a populated table; a genuine lull
+  (`source OK, genuinely quiet`) naming the next release beyond the window; a
+  cached copy (`served from cache (Nh old)`); and a true outage, now carrying
+  its reason. On 2026-08-17 the window Aug 17–24 legitimately contained none of
+  the seven tracked high-impact releases — the next was GDP + PCE on Aug 26 —
+  and that was indistinguishable from a dead source.
+
+- **The release calendar is cached for 6h with stale-serve on failure.** A
+  release schedule is published weeks ahead and is effectively static intraday,
+  so one fetch now covers a full day of FR re-runs.
+
+- **EDGAR now retries 5xx.** A behaviour change, not just plumbing: an EDGAR
+  outage takes ~3x longer to report failure than before. The 403 path is
+  unchanged and still carries its User-Agent explanation, now derived from the
+  raised `HTTPStatusError`.
+
+### Fixed
+
+- **Backoff could exceed its own documented ceiling.** Jitter was applied after
+  the cap, letting a delay land 30% past `MAX_BACKOFF_SECONDS`. Capped after
+  jitter.
+
+- **Stale-serve would never have worked.** The first implementation called
+  `cache.get()` before `cache.get_stale()`, and `get()` deletes expired entries
+  as a side effect of reading — destroying the exact copy the fallback needed.
+  The entry is now read once.
+
+- **An EDGAR test mock hid a bug in itself.** Its fake response excluded 403
+  from raising, so `raise_for_status()` was a no-op for precisely the status
+  EDGAR cares most about. All 4xx/5xx now raise in the fake.
+
+### Unchanged, deliberately
+
+- **No circuit breaker.** Measured: the CoinGecko outage on 2026-08-17 raised
+  `ConnectError`, which fails in milliseconds, not timeouts — the whole outage
+  cost ~21s of a ~70s run, most of it sequential *fallback* attempts rather
+  than retries against a dead host. Not worth the machinery yet.
+
+- **No SLOs, metrics pipeline or health dashboard.** This is a single-user
+  batch job run 10–20x/day, not a service; `core/audit.py` already answers
+  "what did the tool return, and when".
+
+- **The operational claim is NOT made.** The tests prove the retry mechanism is
+  correct. They do not prove the visible failure count drops — a post-migration
+  sample of 22 real FRED calls succeeded with no retry ever firing, which shows
+  only that FRED was healthy. Treat the improvement as a hypothesis until a
+  week of runs has accumulated.
+
 ## 2026-08-11
 
 ### Changed — affects report figures

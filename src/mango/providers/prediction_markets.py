@@ -9,6 +9,8 @@ itself a signal: someone is wrong, and it is worth knowing who.
 import json
 
 import httpx
+
+from mango.core import http
 from mango.core.logging import log
 
 from mango.core import cache
@@ -63,14 +65,11 @@ async def get_prediction_markets(topic: str = "Fed rate") -> dict:
         return cached
 
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                SEARCH_URL,
-                params={"q": topic, "limit_per_type": PREDICTION_MARKETS_LIMIT},
-                timeout=15,
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        data = await http.fetch_json(
+            SEARCH_URL,
+            params={"q": topic, "limit_per_type": PREDICTION_MARKETS_LIMIT},
+            timeout=15,
+        )
     except httpx.TimeoutException:
         log.warning("Polymarket timeout")
         return {"error": "Request timed out", "source": "Polymarket"}

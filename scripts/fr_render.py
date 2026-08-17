@@ -762,6 +762,53 @@ def event_priors(raw: dict) -> dict[str, str]:
     return out
 
 
+def _calendar_reason(calendar: object) -> str:
+    """The provider's exception type, so a failed calendar says WHY it failed.
+
+    A bare httpx.ConnectTimeout stringifies to "", so the provider records
+    "ConnectTimeout: ..." rather than an empty string; discarding it here made
+    a transient network blip indistinguishable from a missing API key.
+    """
+    if not isinstance(calendar, dict):
+        return ""
+    reason = str(calendar.get("error") or "").strip()
+    return f" ({reason})" if reason else ""
+
+
+def _stale_note(calendar: dict) -> str:
+    """Label a calendar served from cache after a live-fetch failure.
+
+    Never silent: a stale value that does not announce itself is the exact
+    silent-wrong-data failure the cache guard exists to prevent.
+    """
+    if not isinstance(calendar, dict) or not calendar.get("stale"):
+        return ""
+    age = calendar.get("stale_age_seconds")
+    when = f"{age / 3600:.1f}h old" if isinstance(age, (int, float)) else "age unknown"
+    why = calendar.get("stale_reason") or "fetch failed"
+    return f"*Calendar served from cache ({when}) — live fetch failed ({why}).*"
+
+
+def _quiet_calendar(calendar: dict) -> str:
+    """Wording for a calendar that fetched fine but has nothing in the window.
+
+    Names the next high-impact release beyond the window when the provider
+    supplies one: "nothing scheduled" alone cannot be told apart from too
+    narrow a high-impact list, which is exactly the doubt this line must remove.
+    """
+    stale = _stale_note(calendar)
+    base = "Economic calendar: no high-impact releases scheduled in the window"
+    # "source OK" would contradict the stale banner, which says the live fetch
+    # failed. A cached quiet window is still quiet — just not freshly confirmed.
+    status = "as of the cached copy" if stale else "source OK, genuinely quiet (not a failure)"
+    nxt = calendar.get("next_beyond_window")
+    if isinstance(nxt, list) and nxt:
+        names = " + ".join(dict.fromkeys(str(e.get("event") or "?") for e in nxt))
+        status += f". Next up: {names} on {nxt[0].get('date') or '—'}"
+    line = f"{base} — {status}."
+    return f"{stale} {line}" if stale else line
+
+
 def render_event_table(calendar: dict, priors: dict | None = None) -> str:
     """Upcoming high-impact releases as the Event | Date | Prior table §11 wants.
 
@@ -776,17 +823,18 @@ def render_event_table(calendar: dict, priors: dict | None = None) -> str:
     it is never guessed.
     """
     if not isinstance(calendar, dict) or calendar.get("error"):
-        return f"Economic calendar: {FAIL}"
+        return f"Economic calendar: {FAIL}{_calendar_reason(calendar)}"
     # An absent `events` key means the source never ran; an empty list means it
     # ran and the week is genuinely quiet. Those must not read the same.
     events = calendar.get("events")
     if not isinstance(events, list):
-        return f"Economic calendar: {FAIL}"
+        return f"Economic calendar: {FAIL}{_calendar_reason(calendar)}"
     if not events:
-        return "Economic calendar: no high-impact releases scheduled in the window."
+        return _quiet_calendar(calendar)
 
     priors = priors or {}
     rows = ["| Event | Date | Prior |", "|---|---|---|"]
+    stale_note = _stale_note(calendar)
     notes = []
     for ev in events:
         if not isinstance(ev, dict):
@@ -799,8 +847,9 @@ def render_event_table(calendar: dict, priors: dict | None = None) -> str:
         if why:
             notes.append(f"- **{name}** — {why}")
     if len(rows) == 2:
-        return "Economic calendar: no high-impact releases scheduled in the window."
-    return "\n".join(rows + ([""] + notes if notes else []))
+        return _quiet_calendar(calendar)
+    body = "\n".join(rows + ([""] + notes if notes else []))
+    return f"{stale_note}\n\n{body}" if stale_note else body
 
 
 def render_region_table(climate: dict) -> str:

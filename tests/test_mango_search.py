@@ -33,6 +33,9 @@ def _mock_response(json_data: dict, status_code: int = 200) -> MagicMock:
 def _mock_client(response: MagicMock) -> AsyncMock:
     client = AsyncMock()
     client.get = AsyncMock(return_value=response)
+    # core/http.fetch_json issues requests via .request(); wire it to the same
+    # canned response so this test still drives the real provider code path.
+    client.request = AsyncMock(return_value=response)
     client.__aenter__ = AsyncMock(return_value=client)
     client.__aexit__ = AsyncMock(return_value=False)
     return client

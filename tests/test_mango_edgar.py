@@ -22,7 +22,11 @@ def _mock_response(text: str = "", json_data=None, status_code: int = 200) -> Ma
     if json_data is not None:
         resp.json.return_value = json_data
     resp.raise_for_status = MagicMock()
-    if status_code >= 400 and status_code != 403:
+    resp.headers = {}  # core/http reads Retry-After on retryable statuses
+    if status_code >= 400:
+        # 403 now raises like any other error status: the shared HTTP layer
+        # calls raise_for_status(), and edgar detects the 403 from the
+        # resulting HTTPStatusError to attach its User-Agent explanation.
         resp.raise_for_status.side_effect = httpx.HTTPStatusError(
             f"HTTP {status_code}", request=MagicMock(), response=resp
         )
@@ -42,8 +46,14 @@ def _mock_client(handlers: list[tuple[str, MagicMock]]) -> AsyncMock:
                 return response
         raise AssertionError(f"unexpected URL in test: {url}")
 
+    async def _request(method, url, **kwargs):
+        return await _get(url, **kwargs)
+
     client = AsyncMock()
     client.get = AsyncMock(side_effect=_get)
+    # core/http.fetch_* issues requests via .request(); dispatch it the same way
+    # so these tests keep exercising the real provider code path.
+    client.request = AsyncMock(side_effect=_request)
     client.__aenter__ = AsyncMock(return_value=client)
     client.__aexit__ = AsyncMock(return_value=False)
     return client
@@ -634,6 +644,10 @@ async def test_connection_error_returns_error_dict_not_raises():
 
     client = AsyncMock()
     client.get = AsyncMock(side_effect=_boom)
+    async def _boom_request(method, url, **kw):
+        return await _boom(url, **kw)
+
+    client.request = AsyncMock(side_effect=_boom_request)
     client.__aenter__ = AsyncMock(return_value=client)
     client.__aexit__ = AsyncMock(return_value=False)
 
@@ -668,6 +682,10 @@ async def test_error_message_never_leaks_query_shaped_secrets():
 
     client = AsyncMock()
     client.get = AsyncMock(side_effect=_boom)
+    async def _boom_request(method, url, **kw):
+        return await _boom(url, **kw)
+
+    client.request = AsyncMock(side_effect=_boom_request)
     client.__aenter__ = AsyncMock(return_value=client)
     client.__aexit__ = AsyncMock(return_value=False)
 

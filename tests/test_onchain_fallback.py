@@ -33,22 +33,25 @@ def _mock_mempool_client(*, hashrate=8.5e20, difficulty=1.2e14, tip="880000", fa
         resp.raise_for_status = MagicMock()
         return resp
 
-    async def fake_get(url, **kwargs):
+    async def fake_json(url, **kwargs):
         if fail:
             raise httpx.ConnectError("boom")
-        if "hashrate" in url:
-            return _resp(payload={"currentHashrate": hashrate, "currentDifficulty": difficulty})
-        return _resp(text=tip)  # /blocks/tip/height
+        return {"currentHashrate": hashrate, "currentDifficulty": difficulty}
 
-    client = AsyncMock()
-    client.get = AsyncMock(side_effect=fake_get)
-    client.__aenter__ = AsyncMock(return_value=client)
-    client.__aexit__ = AsyncMock(return_value=False)
-    return client
+    async def fake_text(url, **kwargs):
+        if fail:
+            raise httpx.ConnectError("boom")
+        return tip  # /blocks/tip/height
+
+    return AsyncMock(side_effect=fake_json), AsyncMock(side_effect=fake_text)
 
 
 async def test_fetch_network_stats_converts_hashrate_to_gh_s():
-    with patch("mango.providers.mempool.httpx.AsyncClient", return_value=_mock_mempool_client()):
+    fetch_json, fetch_text = _mock_mempool_client()
+    with (
+        patch("mango.providers.mempool.http.fetch_json", fetch_json),
+        patch("mango.providers.mempool.http.fetch_text", fetch_text),
+    ):
         stats = await mempool.fetch_btc_network_stats()
     # 8.5e20 H/s ÷ 1e9 = 8.5e11 GH/s
     assert stats["hash_rate_gh_s"] == 8.5e11
@@ -57,9 +60,10 @@ async def test_fetch_network_stats_converts_hashrate_to_gh_s():
 
 
 async def test_fetch_network_stats_returns_none_on_failure():
-    with patch(
-        "mango.providers.mempool.httpx.AsyncClient",
-        return_value=_mock_mempool_client(fail=True),
+    fetch_json, fetch_text = _mock_mempool_client(fail=True)
+    with (
+        patch("mango.providers.mempool.http.fetch_json", fetch_json),
+        patch("mango.providers.mempool.http.fetch_text", fetch_text),
     ):
         assert await mempool.fetch_btc_network_stats() is None
 
@@ -90,23 +94,16 @@ def _mock_blockchain_client(*, fail=False):
         resp.raise_for_status = MagicMock()
         return resp
 
-    async def fake_get(url, **kwargs):
+    async def fake_json(url, **kwargs):
         if fail:
             raise httpx.ConnectError("blockchain.com down")
-        return _resp(_BLOCKCHAIN_STATS)
+        return _BLOCKCHAIN_STATS
 
-    client = AsyncMock()
-    client.get = AsyncMock(side_effect=fake_get)
-    client.__aenter__ = AsyncMock(return_value=client)
-    client.__aexit__ = AsyncMock(return_value=False)
-    return client
+    return AsyncMock(side_effect=fake_json)
 
 
 async def test_onchain_uses_blockchain_com_when_available():
-    with patch(
-        "mango.providers.crypto_analytics.httpx.AsyncClient",
-        return_value=_mock_blockchain_client(),
-    ):
+    with patch("mango.providers.crypto_analytics.http.fetch_json", _mock_blockchain_client()):
         result = await crypto_analytics.get_btc_onchain()
     assert result["source"] == "blockchain.com"
     assert result["network"]["hash_rate_gh_s"] == 9.0e11
@@ -118,10 +115,8 @@ async def test_onchain_uses_blockchain_com_when_available():
 async def test_onchain_falls_back_to_mempool_with_none_tx_fields():
     fallback_stats = {"hash_rate_gh_s": 8.5e11, "difficulty": 1.2e14, "total_blocks_mined": 880000}
     with (
-        patch(
-            "mango.providers.crypto_analytics.httpx.AsyncClient",
-            return_value=_mock_blockchain_client(fail=True),
-        ),
+        patch("mango.providers.crypto_analytics.http.fetch_json",
+              _mock_blockchain_client(fail=True)),
         patch.object(crypto_analytics.mempool, "fetch_btc_network_stats", AsyncMock(return_value=fallback_stats)),
     ):
         result = await crypto_analytics.get_btc_onchain()
@@ -141,10 +136,8 @@ async def test_onchain_falls_back_to_mempool_with_none_tx_fields():
 
 async def test_onchain_error_when_both_sources_down():
     with (
-        patch(
-            "mango.providers.crypto_analytics.httpx.AsyncClient",
-            return_value=_mock_blockchain_client(fail=True),
-        ),
+        patch("mango.providers.crypto_analytics.http.fetch_json",
+              _mock_blockchain_client(fail=True)),
         patch.object(crypto_analytics.mempool, "fetch_btc_network_stats", AsyncMock(return_value=None)),
     ):
         result = await crypto_analytics.get_btc_onchain()

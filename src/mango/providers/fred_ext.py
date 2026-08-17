@@ -14,9 +14,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 
-import httpx
-
-from mango.core import cache
+from mango.core import cache, http
 from mango.analytics import fred_archive
 from mango.ext_settings import CACHE_TTL_ECONOMIC, FRED_API_KEY
 from mango.core.logging import log
@@ -329,20 +327,17 @@ async def get_series_history(series_id: str, start: str = "1900-01-01") -> dict:
 
     resolved = _resolve_series_id(series_id)
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                f"{BASE_URL}/series/observations",
-                params={
-                    "series_id": resolved,
-                    "api_key": FRED_API_KEY,
-                    "file_type": "json",
-                    "observation_start": start,
-                    "sort_order": "asc",
-                },
-                timeout=30,
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        data = await http.fetch_json(
+            f"{BASE_URL}/series/observations",
+            params={
+                "series_id": resolved,
+                "api_key": FRED_API_KEY,
+                "file_type": "json",
+                "observation_start": start,
+                "sort_order": "asc",
+            },
+            timeout=30,
+        )
     except Exception as e:  # noqa: BLE001 — a failed history must not abort the report
         log.warning("FRED history fetch failed for %s: %s", resolved, e)
         return {"error": str(e), "series": resolved, "source": "fred"}
@@ -449,6 +444,62 @@ _HIGH_IMPACT_RELEASES = {
 }
 
 
+# How far PAST the reporting window to look for the next high-impact release.
+# 45 days clears the longest gap between the seven tracked releases (the
+# late-Aug lull between Retail Sales and the following GDP/PCE pair).
+_LOOKAHEAD_DAYS = 45
+# /releases/dates rejects limit>1000 with a 400. FRED publishes ~35 releases a
+# day, so this holds roughly 28 days; anything longer truncates, which is why
+# _fetch_release_dates reports truncation instead of silently returning a
+# short list that would read as "no releases scheduled".
+_RELEASE_DATES_LIMIT = 1000
+# Release schedules are published weeks ahead and effectively static intraday,
+# so a 6h TTL costs nothing in freshness and covers a full day of FR re-runs
+# (the user runs FR 10-20x/day) from one fetch.
+_CALENDAR_TTL_SECONDS = 6 * 60 * 60
+
+
+async def _fetch_release_dates(start: dt.date, end: dt.date) -> tuple[list[dict], bool]:
+    """Release dates in [start, end], ascending, plus whether FRED truncated us.
+
+    Returns (rows, truncated). A truncated read is NOT an error — it still
+    contains the earliest dates, which is what a lookahead needs — but the
+    caller must not read an absence within it as "nothing scheduled".
+    """
+    payload = await http.fetch_json(
+        f"{BASE_URL}/releases/dates",
+        params={
+            "api_key": FRED_API_KEY,
+            "file_type": "json",
+            "realtime_start": start.isoformat(),
+            "realtime_end": end.isoformat(),
+            "include_release_dates_with_no_data": "true",
+            "sort_order": "asc",
+            "limit": _RELEASE_DATES_LIMIT,
+        },
+    )
+    rows = payload.get("release_dates", [])
+    return rows, len(rows) >= _RELEASE_DATES_LIMIT
+
+
+def _high_impact(rows: list[dict], start: str = "", end: str = "") -> list[dict]:
+    """The tracked high-impact releases in `rows`, date-ascending.
+
+    `start`/`end` are optional ISO bounds; FRED already bounds the fetch, so
+    they only matter when one response is split across two date ranges.
+    """
+    out = []
+    for row in rows:
+        rid, when = row.get("release_id"), row.get("date")
+        if rid not in _HIGH_IMPACT_RELEASES or not when:
+            continue
+        if (start and when < start) or (end and when > end):
+            continue
+        name, why = _HIGH_IMPACT_RELEASES[rid]
+        out.append({"date": when, "event": name, "impact": "high", "why": why})
+    return sorted(out, key=lambda e: e["date"])
+
+
 async def get_release_calendar(days: int = 7) -> dict:
     """Upcoming high-impact US data releases from FRED's official schedule.
 
@@ -459,43 +510,66 @@ async def get_release_calendar(days: int = 7) -> dict:
 
     today = dt.date.today()
     end = today + dt.timedelta(days=days)
+    cache_key = f"fred:release_calendar:{days}:{today.isoformat()}"
+    # Read the entry ONCE via get_stale: cache.get() deletes on expiry, which
+    # would destroy the very copy the failure path below needs as a fallback.
+    cached, cached_age = cache.get_stale(cache_key)
+    if isinstance(cached, dict) and cached_age is not None and cached_age < _CALENDAR_TTL_SECONDS:
+        return cached
+
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                f"{BASE_URL}/releases/dates",
-                params={
-                    "api_key": FRED_API_KEY,
-                    "file_type": "json",
-                    "realtime_start": today.isoformat(),
-                    "realtime_end": end.isoformat(),
-                    "include_release_dates_with_no_data": "true",
-                },
-                timeout=15,
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        rows, _ = await _fetch_release_dates(today, end)
     except Exception as e:  # noqa: BLE001
         log.warning("FRED release calendar failed: %s", e)
+        # A release schedule barely moves intraday, so a labelled stale copy is
+        # strictly better than an empty section. The age is carried through to
+        # the report — an unlabelled stale value would be silent wrong data.
+        if isinstance(cached, dict):
+            log.info("serving stale release calendar (age %.0fs)", cached_age or 0)
+            return {**cached, "stale": True, "stale_age_seconds": cached_age,
+                    "stale_reason": type(e).__name__}
         # Include the exception TYPE: a bare httpx.ConnectTimeout stringifies to
         # "", so the report rendered "source failed" with no reason at all and
         # the failure could not be told apart from a missing API key.
         return {"error": f"{type(e).__name__}: {e}".strip(": "), "source": "fred"}
 
-    events = []
-    for row in data.get("release_dates", []):
-        rid, when = row.get("release_id"), row.get("date")
-        if rid not in _HIGH_IMPACT_RELEASES or not when:
-            continue
-        if not (today.isoformat() <= when <= end.isoformat()):
-            continue
-        name, why = _HIGH_IMPACT_RELEASES[rid]
-        events.append({"date": when, "event": name, "impact": "high", "why": why})
-
-    events.sort(key=lambda e: e["date"])
-    return {
+    events = _high_impact(rows, today.isoformat(), end.isoformat())
+    # Only when the window is empty do we pay for a second call to name the next
+    # release — a quiet week must be reportable as quiet, not as a dead source.
+    next_up: list[dict] = []
+    lookahead_note = None
+    if not events:
+        try:
+            ahead, truncated = await _fetch_release_dates(
+                end + dt.timedelta(days=1), end + dt.timedelta(days=_LOOKAHEAD_DAYS)
+            )
+            beyond = _high_impact(ahead)
+            if beyond:
+                # Everything sharing the earliest date, so "GDP + PCE on Aug 26"
+                # renders whole rather than naming one of two same-day releases.
+                next_up = [e for e in beyond if e["date"] == beyond[0]["date"]]
+            elif truncated:
+                lookahead_note = (
+                    f"FRED capped the lookahead at {_RELEASE_DATES_LIMIT} rows, so the "
+                    "next release could not be determined — absence here is not evidence."
+                )
+        except Exception as e:  # noqa: BLE001
+            # A failed lookahead must not sink a good in-window result.
+            log.warning("FRED release-calendar lookahead failed: %s", e)
+            lookahead_note = f"lookahead unavailable ({type(e).__name__})"
+    result = {
         "events": events,
+        "next_beyond_window": next_up,
+        "lookahead_note": lookahead_note,
+        "lookahead_days": _LOOKAHEAD_DAYS,
         "window_days": days,
         "note": "High-impact US releases from FRED's official schedule. Free fallback for "
-                "the premium-walled Finnhub calendar.",
+                "the premium-walled Finnhub calendar. `next_beyond_window` names the "
+                "first high-impact release AFTER the window, so an empty `events` list "
+                "can be reported as a genuine lull rather than a missing source.",
         "source": "fred",
     }
+    # A quiet window is a real, cacheable answer — caching only non-empty
+    # results would leave exactly the lull case with no fallback copy.
+    cache.set(cache_key, result, _CALENDAR_TTL_SECONDS)
+    return result

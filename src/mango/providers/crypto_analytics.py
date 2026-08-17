@@ -8,6 +8,8 @@ from mango.core import paths
 
 import httpx
 
+from mango.core import http
+
 from mango.core import cache
 from mango._lazy_yfinance import yfinance
 from mango.ext_settings import (
@@ -124,10 +126,9 @@ async def get_fear_greed(limit: int = 30) -> dict:
         return cached
 
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(_ALTERNATIVE_ME_URL, params={"limit": limit, "format": "json"}, timeout=10)
-            resp.raise_for_status()
-            raw = resp.json()
+        raw = await http.fetch_json(
+            _ALTERNATIVE_ME_URL, params={"limit": limit, "format": "json"}, timeout=10
+        )
     except Exception as e:
         log.warning("Alternative.me Fear & Greed fetch failed: %s", e)
         return {"error": str(e), "source": "alternative.me"}
@@ -273,10 +274,7 @@ async def get_btc_onchain() -> dict:
         return cached
 
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(_BLOCKCHAIN_COM_STATS, timeout=10)
-            resp.raise_for_status()
-            data = resp.json()
+        data = await http.fetch_json(_BLOCKCHAIN_COM_STATS, timeout=10)
     except Exception as e:
         log.warning("Blockchain.com stats fetch failed: %s", e)
         fallback = await mempool.fetch_btc_network_stats()
@@ -620,15 +618,15 @@ async def _fetch_mvrv_percentile(client: httpx.AsyncClient, current: float) -> f
     history is both honest and consistent with how the equity leg scores CAPE.
     """
     try:
-        resp = await client.get(
+        resp = await http.fetch_json(
             _COINMETRICS_BASE,
+            client=client,
             params={"assets": "btc", "metrics": "CapMVRVCur", "frequency": "1d",
                     "page_size": _COINMETRICS_HISTORY_PAGE_SIZE,
                     "start_time": _COINMETRICS_HISTORY_START},
             timeout=45,
         )
-        resp.raise_for_status()
-        vals = [float(r["CapMVRVCur"]) for r in resp.json().get("data", []) if r.get("CapMVRVCur")]
+        vals = [float(r["CapMVRVCur"]) for r in (resp.get("data") or []) if r.get("CapMVRVCur")]
         if len(vals) < _MVRV_MIN_HISTORY_OBSERVATIONS:
             return None
         return round(100 * sum(1 for v in vals if v < current) / len(vals), 1)
@@ -640,14 +638,14 @@ async def _fetch_mvrv_percentile(client: httpx.AsyncClient, current: float) -> f
 async def _fetch_coinmetrics_valuation(client: httpx.AsyncClient) -> dict | None:
     """MVRV from Coin Metrics. Primary source: reputable and generously rate-limited."""
     try:
-        resp = await client.get(
+        resp = await http.fetch_json(
             _COINMETRICS_BASE,
+            client=client,
             params={"assets": "btc", "metrics": _COINMETRICS_METRICS,
                     "frequency": "1d", "page_size": 1},
             timeout=15,
         )
-        resp.raise_for_status()
-        rows = resp.json().get("data") or []
+        rows = resp.get("data") or []
         if not rows:
             return None
         row = rows[-1]
@@ -696,9 +694,9 @@ async def get_btc_valuation(spot_usd: float | None = None) -> dict:
         async with httpx.AsyncClient() as client:
             async def fetch(label: str, endpoint: str, field: str) -> None:
                 try:
-                    resp = await client.get(f"{_BITCOIN_DATA_BASE}/{endpoint}/last", timeout=10)
-                    resp.raise_for_status()
-                    payload = resp.json()
+                    payload = await http.fetch_json(
+                        f"{_BITCOIN_DATA_BASE}/{endpoint}/last", client=client, timeout=10
+                    )
                     value = payload.get(field)
                     out[label] = float(value) if value is not None else None
                     out.setdefault("as_of", payload.get("d"))

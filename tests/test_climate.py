@@ -38,24 +38,14 @@ def _climatology_payload(month_abbr, normal_temp, normal_precip):
     }
 
 
-def _mock_client(daily, clim, fail=False):
-    def _resp(payload):
-        resp = MagicMock(spec=httpx.Response)
-        resp.status_code = 200
-        resp.json = MagicMock(return_value=payload)
-        resp.raise_for_status = MagicMock()
-        return resp
-
-    async def fake_get(url, **kwargs):
+def _mock_fetch(daily, clim, fail=False):
+    """Stand in for http.fetch_json, which now owns transport and returns parsed JSON."""
+    async def fake_fetch(url, **kwargs):
         if fail:
             raise httpx.ConnectError("boom")
-        return _resp(daily) if "daily" in url else _resp(clim)
+        return daily if "daily" in url else clim
 
-    client = AsyncMock()
-    client.get = AsyncMock(side_effect=fake_get)
-    client.__aenter__ = AsyncMock(return_value=client)
-    client.__aexit__ = AsyncMock(return_value=False)
-    return client
+    return AsyncMock(side_effect=fake_fetch)
 
 
 async def test_flags_hot_dry_region():
@@ -65,7 +55,7 @@ async def test_flags_hot_dry_region():
     daily = _daily_payload([30.0, 31.0, 29.0], [0.0, 0.0, 0.0])
     clim = _climatology_payload(month_abbr, normal_temp=20.0, normal_precip=5.0)
 
-    with patch("mango.providers.climate.httpx.AsyncClient", return_value=_mock_client(daily, clim)):
+    with patch("mango.providers.climate.http.fetch_json", _mock_fetch(daily, clim)):
         result = await climate.get_climate_risk_watch()
 
     assert "regions" in result
@@ -86,7 +76,7 @@ async def test_normal_conditions_not_flagged():
     daily = _daily_payload([20.0, 20.0, 20.0], [5.0, 5.0, 5.0])
     clim = _climatology_payload(month_abbr, normal_temp=20.0, normal_precip=5.0)
 
-    with patch("mango.providers.climate.httpx.AsyncClient", return_value=_mock_client(daily, clim)):
+    with patch("mango.providers.climate.http.fetch_json", _mock_fetch(daily, clim)):
         result = await climate.get_climate_risk_watch()
 
     assert result["flagged_regions"] == []
@@ -96,8 +86,8 @@ async def test_normal_conditions_not_flagged():
 
 async def test_source_failure_returns_error_not_exception():
     with patch(
-        "mango.providers.climate.httpx.AsyncClient",
-        return_value=_mock_client({}, {}, fail=True),
+        "mango.providers.climate.http.fetch_json",
+        _mock_fetch({}, {}, fail=True),
     ):
         result = await climate.get_climate_risk_watch()
 
