@@ -8,7 +8,7 @@ from __future__ import annotations
 import csv
 import io
 
-import httpx
+from mango.core import http
 
 from mango.core import cache
 from mango.ext_settings import CACHE_TTL_ONCHAIN
@@ -41,10 +41,8 @@ async def get_gz_credit_spread() -> dict:
         return cached
 
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(_EBP_CSV_URL, timeout=30)
-            resp.raise_for_status()
-            rows = list(csv.DictReader(io.StringIO(resp.text)))
+        text = await http.fetch_text(_EBP_CSV_URL, timeout=30)
+        rows = list(csv.DictReader(io.StringIO(text)))
     except Exception as e:
         log.warning("GZ/EBP fetch failed: %s", e)
         return {"error": str(e), "source": "federalreserve.gov"}

@@ -57,12 +57,8 @@ _PRIOR = {
 
 async def test_get_cot_report_success():
     """Returns latest positioning with week-over-week change for each trader category."""
-    mock_client = AsyncMock()
-    mock_client.get.return_value = _mock_response([_LATEST, _PRIOR])
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=False)
-
-    with patch("mango.providers.cftc.httpx.AsyncClient", return_value=mock_client):
+    with patch("mango.providers.cftc.http.fetch_json",
+               AsyncMock(return_value=[_LATEST, _PRIOR])):
         result = await cftc.get_cot_report("btc")
 
     assert result["source"] == "cftc"
@@ -96,12 +92,7 @@ async def test_get_cot_report_unknown_market():
 
 async def test_get_cot_report_no_data():
     """Empty response from CFTC returns an error dict."""
-    mock_client = AsyncMock()
-    mock_client.get.return_value = _mock_response([])
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=False)
-
-    with patch("mango.providers.cftc.httpx.AsyncClient", return_value=mock_client):
+    with patch("mango.providers.cftc.http.fetch_json", AsyncMock(return_value=[])):
         result = await cftc.get_cot_report("btc")
 
     assert "error" in result
@@ -110,12 +101,8 @@ async def test_get_cot_report_no_data():
 
 async def test_get_cot_report_connection_error():
     """Connection failure returns an error dict."""
-    mock_client = AsyncMock()
-    mock_client.get = AsyncMock(side_effect=httpx.ConnectError("boom"))
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=False)
-
-    with patch("mango.providers.cftc.httpx.AsyncClient", return_value=mock_client):
+    with patch("mango.providers.cftc.http.fetch_json",
+               AsyncMock(side_effect=httpx.ConnectError("boom"))):
         result = await cftc.get_cot_report("btc")
 
     assert "error" in result
@@ -124,14 +111,10 @@ async def test_get_cot_report_connection_error():
 
 async def test_get_cot_report_cache_hit():
     """Second call uses cached result without re-fetching."""
-    mock_client = AsyncMock()
-    mock_client.get.return_value = _mock_response([_LATEST, _PRIOR])
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=False)
-
-    with patch("mango.providers.cftc.httpx.AsyncClient", return_value=mock_client) as mock_cls:
+    fetch = AsyncMock(return_value=[_LATEST, _PRIOR])
+    with patch("mango.providers.cftc.http.fetch_json", fetch):
         first = await cftc.get_cot_report("btc")
         second = await cftc.get_cot_report("btc")
 
     assert first == second
-    assert mock_cls.call_count == 1
+    assert fetch.call_count == 1, "second call must be served from cache, not refetched"

@@ -174,6 +174,47 @@ def get(key: str) -> dict | list | None:
     return entry.get("value")
 
 
+def get_stale(key: str) -> tuple[dict | list | None, float | None]:
+    """Return `(value, age_seconds)` for `key` EVEN IF the entry has expired.
+
+    For sources where a known-old answer beats no answer at all — an economic
+    release calendar barely changes intraday, so serving one that is six hours
+    stale, clearly labelled with its age, is strictly better than rendering
+    "data unavailable (source failed)" when the upstream is briefly down.
+
+    Deliberately does NOT delete on expiry, unlike `get()`: the whole point is
+    that the expired copy survives to be used as a fallback. Callers must
+    surface the age — an unlabelled stale value is exactly the silent-wrong-data
+    failure this module's guard rules exist to prevent.
+
+    Returns `(None, None)` on any miss, so it never raises.
+    """
+    path = _entry_path(key)
+    if not path.is_file():
+        return None, None
+    try:
+        entry = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None, None
+    if not isinstance(entry, dict):
+        return None, None
+    if not isinstance(entry.get("expires_at"), (int, float)):
+        # Same malformed-entry rule as get(): no expiry means no provenance.
+        return None, None
+    return entry.get("value"), _age_seconds(entry)
+
+
+def _age_seconds(entry: dict) -> float | None:
+    """Seconds since the entry was written, from the `cached_at` stamp."""
+    try:
+        written = datetime.fromisoformat(str(entry["cached_at"]))
+    except (KeyError, TypeError, ValueError):
+        return None
+    if written.tzinfo is None:
+        written = written.replace(tzinfo=timezone.utc)
+    return max(0.0, (datetime.now(timezone.utc) - written).total_seconds())
+
+
 def set(key: str, value: dict | list, ttl: int = DEFAULT_TTL_SECONDS) -> None:
     """Store `value` under `key` with expiry now + `ttl` seconds.
 

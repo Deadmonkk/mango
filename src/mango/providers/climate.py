@@ -40,6 +40,8 @@ import asyncio
 import datetime as dt
 
 import httpx
+
+from mango.core import http
 from mango.core.logging import log
 
 from mango.core import cache
@@ -195,8 +197,9 @@ def _fmt_date(d: dt.date) -> str:
 
 
 async def _fetch_daily(client: httpx.AsyncClient, lat: float, lon: float, start: str, end: str) -> dict:
-    resp = await client.get(
+    return await http.fetch_json(
         f"{BASE_URL}/daily/point",
+        client=client,
         params={
             "parameters": "T2M,PRECTOTCORR",
             "community": "AG",
@@ -208,13 +211,12 @@ async def _fetch_daily(client: httpx.AsyncClient, lat: float, lon: float, start:
         },
         timeout=20,
     )
-    resp.raise_for_status()
-    return resp.json()
 
 
 async def _fetch_climatology(client: httpx.AsyncClient, lat: float, lon: float) -> dict:
-    resp = await client.get(
+    return await http.fetch_json(
         f"{BASE_URL}/climatology/point",
+        client=client,
         params={
             "parameters": "T2M,PRECTOTCORR",
             "community": "AG",
@@ -224,8 +226,6 @@ async def _fetch_climatology(client: httpx.AsyncClient, lat: float, lon: float) 
         },
         timeout=20,
     )
-    resp.raise_for_status()
-    return resp.json()
 
 
 def _signal(temp_anomaly_c: float | None, precip_anomaly_pct: float | None) -> str:

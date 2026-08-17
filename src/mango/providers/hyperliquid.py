@@ -16,7 +16,7 @@ Provider contract: never raises — returns ``None`` on any failure so the calle
 can fall through to its existing CoinGecko error.
 """
 
-import httpx
+from mango.core import http
 from mango.core.logging import log
 
 INFO_URL = "https://api.hyperliquid.xyz/info"
@@ -69,10 +69,9 @@ async def fetch_derivatives(focus: set[str]) -> dict[str, dict] | None:
     unexpected shape.
     """
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(INFO_URL, json={"type": "metaAndAssetCtxs"}, timeout=15)
-            resp.raise_for_status()
-            payload = resp.json()
+        payload = await http.fetch_json(
+            INFO_URL, method="POST", json_body={"type": "metaAndAssetCtxs"}, timeout=15
+        )
     except Exception as e:  # provider contract: never raise
         log.warning("Hyperliquid derivatives fallback failed: %s", e)
         return None

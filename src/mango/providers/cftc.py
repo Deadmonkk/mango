@@ -1,6 +1,8 @@
 """CFTC Commitment of Traders provider — futures positioning, free and unauthenticated."""
 
 import httpx
+
+from mango.core import http
 from mango.core.logging import log
 
 from mango.core import cache
@@ -58,10 +60,7 @@ async def get_cot_report(market: str) -> dict:
     }
 
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(BASE_URL, params=params, timeout=10)
-            resp.raise_for_status()
-            data = resp.json()
+        data = await http.fetch_json(BASE_URL, params=params, timeout=10)
     except httpx.TimeoutException:
         log.warning("CFTC timeout for market %s", market_name)
         return {"error": "Request timed out", "source": "cftc"}

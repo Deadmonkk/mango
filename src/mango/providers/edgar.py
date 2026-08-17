@@ -36,6 +36,8 @@ from typing import Any
 
 import httpx
 
+from mango.core import http
+
 from mango.core import cache
 from mango.core.limiter import RateLimiter
 from mango.core.logging import get_logger
@@ -169,26 +171,27 @@ async def _request_text(client: httpx.AsyncClient, url: str, params: dict | None
     """
     await _limiter.acquire()
     try:
-        response = await client.get(url, params=params, headers=_request_headers(), timeout=REQUEST_TIMEOUT_SECONDS)
+        return await http.fetch_text(
+            url, client=client, params=params, headers=_request_headers(),
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
     except httpx.TimeoutException as exc:
         raise EdgarRequestError(f"Request to {url} timed out") from exc
+    except httpx.HTTPStatusError as exc:
+        # 403 keeps its explanatory message: on EDGAR that status overwhelmingly
+        # means "no/bad User-Agent", and a bare "HTTP 403" tells the caller
+        # nothing actionable. Note fetch_text does NOT retry a 403 — correct
+        # here, since no number of attempts fixes a missing header.
+        if exc.response.status_code == 403:
+            raise EdgarRequestError(
+                "SEC EDGAR returned 403 Forbidden. This endpoint requires a descriptive "
+                "User-Agent header (name + contact info) per SEC's fair-access policy — "
+                "set the SEC_USER_AGENT environment variable to a real identifying value "
+                "(e.g. 'YourApp/1.0 (contact@yourdomain.com)')."
+            ) from exc
+        raise EdgarRequestError(f"HTTP {exc.response.status_code} from {url}") from exc
     except httpx.RequestError as exc:
         raise EdgarRequestError(f"Connection to {url} failed: {redact_text(str(exc))}") from exc
-
-    if response.status_code == 403:
-        raise EdgarRequestError(
-            "SEC EDGAR returned 403 Forbidden. This endpoint requires a descriptive "
-            "User-Agent header (name + contact info) per SEC's fair-access policy — "
-            "set the SEC_USER_AGENT environment variable to a real identifying value "
-            "(e.g. 'YourApp/1.0 (contact@yourdomain.com)')."
-        )
-
-    try:
-        response.raise_for_status()
-    except httpx.HTTPStatusError as exc:
-        raise EdgarRequestError(f"HTTP {exc.response.status_code} from {url}") from exc
-
-    return response.text
 
 
 def _strip_namespaces(root: ET.Element) -> ET.Element:

@@ -12,6 +12,8 @@ import re
 import statistics
 
 import httpx
+
+from mango.core import http
 from mango.core.logging import log
 
 from mango.core import cache
@@ -50,10 +52,9 @@ def _parse_aaii_table(page_html: str) -> list[dict]:
 async def _fetch_aaii_survey() -> list[dict]:
     """Weekly AAII survey rows (newest first), or [] if unavailable."""
     try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            resp = await client.get(AAII_URL, headers=_html.BROWSER_HEADERS, timeout=20)
-            resp.raise_for_status()
-            page_html = resp.text
+        page_html = await http.fetch_text(
+            AAII_URL, headers=_html.BROWSER_HEADERS, timeout=20
+        )
     except httpx.HTTPError as e:
         log.warning("AAII fetch failed: %s", e)
         return []

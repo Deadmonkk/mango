@@ -106,12 +106,8 @@ def test_parse_farside_html_extracts_daily_rows():
 
 async def test_get_btc_etf_flows_success():
     """Returns recent daily flows with latest-day detail and a flow signal."""
-    mock_client = AsyncMock()
-    mock_client.get = AsyncMock(return_value=_mock_response(_SAMPLE_HTML))
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=False)
-
-    with patch("mango.providers.etf_flows.httpx.AsyncClient", return_value=mock_client):
+    with patch("mango.providers.etf_flows.http.fetch_text",
+               AsyncMock(return_value=_SAMPLE_HTML)):
         result = await etf_flows.get_btc_etf_flows(days=2)
 
     assert result["source"] == "farside"
@@ -126,12 +122,11 @@ async def test_get_btc_etf_flows_success():
 
 async def test_get_btc_etf_flows_blocked_returns_error():
     """A 403 (e.g. Cloudflare) returns an error dict, never raises."""
-    mock_client = AsyncMock()
-    mock_client.get = AsyncMock(return_value=_mock_response("denied", 403))
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=False)
-
-    with patch("mango.providers.etf_flows.httpx.AsyncClient", return_value=mock_client):
+    denied = httpx.HTTPStatusError(
+        "403", request=httpx.Request("GET", "https://x"),
+        response=httpx.Response(403),
+    )
+    with patch("mango.providers.etf_flows.http.fetch_text", AsyncMock(side_effect=denied)):
         result = await etf_flows.get_btc_etf_flows()
 
     assert "error" in result

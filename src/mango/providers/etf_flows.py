@@ -7,6 +7,8 @@ GBTC, ...) are the most direct gauge of institutional demand for Bitcoin.
 import re
 
 import httpx
+
+from mango.core import http
 from mango.core.logging import log
 
 from mango.core import cache
@@ -89,10 +91,9 @@ async def get_btc_etf_flows(days: int = ETF_FLOWS_DEFAULT_DAYS) -> dict:
         return cached
 
     try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            resp = await client.get(BASE_URL, headers=_html.BROWSER_HEADERS, timeout=15)
-            resp.raise_for_status()
-            page_html = resp.text
+        page_html = await http.fetch_text(
+            BASE_URL, headers=_html.BROWSER_HEADERS, timeout=15
+        )
     except httpx.TimeoutException:
         log.warning("Farside timeout")
         return {"error": "Request timed out", "source": "farside"}

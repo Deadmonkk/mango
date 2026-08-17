@@ -3,6 +3,8 @@
 import asyncio
 
 import httpx
+
+from mango.core import http
 from mango.core.logging import log
 from mango.core.limiter import RateLimiter
 
@@ -27,9 +29,7 @@ async def _fetch(client: httpx.AsyncClient, url: str) -> dict | list:
     await _rate_limiter.acquire()
     log.debug("DefiLlama request: %s", url)
     try:
-        resp = await client.get(url, timeout=10)
-        resp.raise_for_status()
-        return resp.json()
+        return await http.fetch_json(url, client=client, timeout=10)
     except httpx.TimeoutException:
         log.warning("DefiLlama timeout: %s", url)
         return {"_error": "Request timed out"}

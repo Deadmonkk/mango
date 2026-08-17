@@ -9,6 +9,8 @@ import re
 from datetime import date, timedelta
 
 import httpx
+
+from mango.core import http
 from mango.core.logging import log
 
 from mango.core import cache
@@ -87,10 +89,9 @@ async def get_fomc_meetings(days_ahead: int = 7) -> dict:
         return cached
 
     try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            resp = await client.get(CALENDAR_URL, headers=_html.BROWSER_HEADERS, timeout=15)
-            resp.raise_for_status()
-            page_html = resp.text
+        page_html = await http.fetch_text(
+            CALENDAR_URL, headers=_html.BROWSER_HEADERS, timeout=15
+        )
     except httpx.TimeoutException:
         log.warning("Fed calendar timeout")
         return {"error": "Request timed out", "source": "federalreserve.gov"}

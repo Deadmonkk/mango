@@ -40,20 +40,20 @@ _CHAINS_DATA = [
 _HISTORICAL_DATA = [{"date": 1_700_000_000 + i * 86400, "tvl": 70_000_000_000 + i * 100_000_000} for i in range(32)]
 
 
-async def _mock_get(url, **kwargs):
+async def _mock_fetch_json(url, **kwargs):
+    """Stand in for http.fetch_json — returns parsed JSON, not a response."""
     if "historicalChainTvl" in url:
-        return _mock_response(_HISTORICAL_DATA)
-    return _mock_response(_CHAINS_DATA)
+        return _HISTORICAL_DATA
+    if "stablecoincharts" in url:
+        return _STABLECOIN_HISTORY
+    if "stablecoins" in url:
+        return _STABLECOIN_ASSETS
+    return _CHAINS_DATA
 
 
 async def test_get_defi_overview_success():
     """Returns total TVL, top chains by share, and TVL trend changes."""
-    mock_client = AsyncMock()
-    mock_client.get = _mock_get
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=False)
-
-    with patch("mango.providers.defillama.httpx.AsyncClient", return_value=mock_client):
+    with patch("mango.providers.defillama.http.fetch_json", _mock_fetch_json):
         result = await defillama.get_defi_overview()
 
     assert result["source"] == "defillama"
@@ -74,12 +74,8 @@ async def test_get_defi_overview_success():
 
 async def test_get_defi_overview_error():
     """Connection failure returns an error dict."""
-    mock_client = AsyncMock()
-    mock_client.get = AsyncMock(side_effect=httpx.ConnectError("boom"))
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=False)
-
-    with patch("mango.providers.defillama.httpx.AsyncClient", return_value=mock_client):
+    with patch("mango.providers.defillama.http.fetch_json",
+               AsyncMock(side_effect=httpx.ConnectError("boom"))):
         result = await defillama.get_defi_overview()
 
     assert "error" in result
@@ -88,18 +84,14 @@ async def test_get_defi_overview_error():
 
 async def test_get_defi_overview_cache_hit():
     """Second call uses cached result without re-fetching."""
-    mock_client = AsyncMock()
-    mock_client.get = _mock_get
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=False)
-
-    with patch("mango.providers.defillama.httpx.AsyncClient", return_value=mock_client) as mock_cls:
+    fetch = AsyncMock(side_effect=_mock_fetch_json)
+    with patch("mango.providers.defillama.http.fetch_json", fetch):
         first = await defillama.get_defi_overview()
         second = await defillama.get_defi_overview()
 
     assert first == second
-    # AsyncClient should only be constructed once (second call hit cache)
-    assert mock_cls.call_count == 1
+    # Two endpoints fetched on the first call; the second must hit the cache.
+    assert fetch.call_count == 2, "second call refetched instead of using the cache"
 
 
 # ---------------------------------------------------------------------------
@@ -129,12 +121,7 @@ async def _mock_stablecoin_get(url, **kwargs):
 
 async def test_get_stablecoins_overview_success():
     """Returns total supply, top stablecoins by share, and supply growth signal."""
-    mock_client = AsyncMock()
-    mock_client.get = _mock_stablecoin_get
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=False)
-
-    with patch("mango.providers.defillama.httpx.AsyncClient", return_value=mock_client):
+    with patch("mango.providers.defillama.http.fetch_json", _mock_fetch_json):
         result = await defillama.get_stablecoins_overview()
 
     assert result["source"] == "defillama"
@@ -152,12 +139,8 @@ async def test_get_stablecoins_overview_success():
 
 async def test_get_stablecoins_overview_error():
     """Connection failure returns an error dict."""
-    mock_client = AsyncMock()
-    mock_client.get = AsyncMock(side_effect=httpx.ConnectError("boom"))
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=False)
-
-    with patch("mango.providers.defillama.httpx.AsyncClient", return_value=mock_client):
+    with patch("mango.providers.defillama.http.fetch_json",
+               AsyncMock(side_effect=httpx.ConnectError("boom"))):
         result = await defillama.get_stablecoins_overview()
 
     assert "error" in result

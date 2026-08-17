@@ -18,28 +18,18 @@ _FEES = {"fastestFee": 4, "halfHourFee": 3, "hourFee": 2, "economyFee": 2, "mini
 _MEMPOOL = {"count": 52184, "vsize": 30137833, "total_fee": 11690361}
 
 
-def _mock_client(fees=_FEES, mempool_stats=_MEMPOOL, fail=False):
-    def _resp(payload):
-        resp = MagicMock(spec=httpx.Response)
-        resp.status_code = 200
-        resp.json = MagicMock(return_value=payload)
-        resp.raise_for_status = MagicMock()
-        return resp
-
-    async def fake_get(url, **kwargs):
+def _mock_fetch(fees=_FEES, mempool_stats=_MEMPOOL, fail=False):
+    """Stand in for http.fetch_json, which now owns transport and returns parsed JSON."""
+    async def fake_fetch(url, **kwargs):
         if fail:
             raise httpx.ConnectError("boom")
-        return _resp(fees) if "fees" in url else _resp(mempool_stats)
+        return fees if "fees" in url else mempool_stats
 
-    client = AsyncMock()
-    client.get = AsyncMock(side_effect=fake_get)
-    client.__aenter__ = AsyncMock(return_value=client)
-    client.__aexit__ = AsyncMock(return_value=False)
-    return client
+    return AsyncMock(side_effect=fake_fetch)
 
 
 async def test_get_btc_mempool_quiet_network():
-    with patch("mango.providers.mempool.httpx.AsyncClient", return_value=_mock_client()):
+    with patch("mango.providers.mempool.http.fetch_json", _mock_fetch()):
         result = await mempool.get_btc_mempool()
 
     assert result["source"] == "mempool.space"
@@ -52,20 +42,14 @@ async def test_get_btc_mempool_quiet_network():
 
 async def test_get_btc_mempool_congested_network():
     hot_fees = {"fastestFee": 80, "halfHourFee": 60, "hourFee": 40, "economyFee": 20, "minimumFee": 5}
-    with patch(
-        "mango.providers.mempool.httpx.AsyncClient",
-        return_value=_mock_client(fees=hot_fees),
-    ):
+    with patch("mango.providers.mempool.http.fetch_json", _mock_fetch(fees=hot_fees)):
         result = await mempool.get_btc_mempool()
 
     assert "congested" in result["signal"].lower()
 
 
 async def test_get_btc_mempool_failure_returns_error():
-    with patch(
-        "mango.providers.mempool.httpx.AsyncClient",
-        return_value=_mock_client(fail=True),
-    ):
+    with patch("mango.providers.mempool.http.fetch_json", _mock_fetch(fail=True)):
         result = await mempool.get_btc_mempool()
 
     assert "error" in result

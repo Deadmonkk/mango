@@ -46,31 +46,15 @@ _SEARCH = {
 }
 
 
-def _mock_client(payload=_SEARCH, fail=False):
-    def _resp():
-        resp = MagicMock(spec=httpx.Response)
-        resp.status_code = 200
-        resp.json = MagicMock(return_value=payload)
-        resp.raise_for_status = MagicMock()
-        return resp
-
-    async def fake_get(url, **kwargs):
-        if fail:
-            raise httpx.ConnectError("boom")
-        return _resp()
-
-    client = AsyncMock()
-    client.get = AsyncMock(side_effect=fake_get)
-    client.__aenter__ = AsyncMock(return_value=client)
-    client.__aexit__ = AsyncMock(return_value=False)
-    return client
+def _fetch(payload=_SEARCH, fail=False):
+    """Stand in for http.fetch_json, which now owns transport and returns parsed JSON."""
+    if fail:
+        return AsyncMock(side_effect=httpx.ConnectError("boom"))
+    return AsyncMock(return_value=payload)
 
 
 async def test_prediction_markets_parses_probabilities():
-    with patch(
-        "mango.providers.prediction_markets.httpx.AsyncClient",
-        return_value=_mock_client(),
-    ):
+    with patch("mango.providers.prediction_markets.http.fetch_json", _fetch()):
         result = await prediction_markets.get_prediction_markets("Fed rate")
 
     assert result["source"] == "Polymarket (Gamma public-search)"
@@ -87,10 +71,7 @@ async def test_prediction_markets_parses_probabilities():
 
 async def test_prediction_markets_skips_unpriced():
     payload = {"events": [{"title": "x", "markets": [{"question": "q", "outcomePrices": None}]}]}
-    with patch(
-        "mango.providers.prediction_markets.httpx.AsyncClient",
-        return_value=_mock_client(payload=payload),
-    ):
+    with patch("mango.providers.prediction_markets.http.fetch_json", _fetch(payload=payload)):
         result = await prediction_markets.get_prediction_markets("x")
 
     assert result["markets"] == []
@@ -98,10 +79,7 @@ async def test_prediction_markets_skips_unpriced():
 
 
 async def test_prediction_markets_failure_returns_error():
-    with patch(
-        "mango.providers.prediction_markets.httpx.AsyncClient",
-        return_value=_mock_client(fail=True),
-    ):
+    with patch("mango.providers.prediction_markets.http.fetch_json", _fetch(fail=True)):
         result = await prediction_markets.get_prediction_markets("Fed rate")
 
     assert "error" in result

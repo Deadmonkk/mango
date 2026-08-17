@@ -40,6 +40,8 @@ from typing import Any
 
 import httpx
 
+from mango.core import http
+
 from mango.core import cache
 from mango.core.html import BROWSER_HEADERS, table_rows
 from mango.core.logging import get_logger
@@ -76,12 +78,9 @@ def _error(message: str, **context: object) -> dict:
 
 
 async def _fetch_constituents_html() -> str:
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            CONSTITUENTS_URL, headers=BROWSER_HEADERS, timeout=REQUEST_TIMEOUT_SECONDS
-        )
-        response.raise_for_status()
-        return response.text
+    return await http.fetch_text(
+        CONSTITUENTS_URL, headers=BROWSER_HEADERS, timeout=REQUEST_TIMEOUT_SECONDS
+    )
 
 
 def _header_index(header: list[str], *keywords: str) -> int | None:

@@ -8,6 +8,8 @@ demand is spiking (bull-market congestion or an inscription/ordinals wave).
 import math
 
 import httpx
+
+from mango.core import http
 from mango.core.logging import log
 
 from mango.core import cache
@@ -52,12 +54,8 @@ async def get_btc_mempool() -> dict:
 
     try:
         async with httpx.AsyncClient() as client:
-            fees_resp = await client.get(f"{BASE_URL}/v1/fees/recommended", timeout=15)
-            fees_resp.raise_for_status()
-            mempool_resp = await client.get(f"{BASE_URL}/mempool", timeout=15)
-            mempool_resp.raise_for_status()
-            fees = fees_resp.json()
-            stats = mempool_resp.json()
+            fees = await http.fetch_json(f"{BASE_URL}/v1/fees/recommended", client=client, timeout=15)
+            stats = await http.fetch_json(f"{BASE_URL}/mempool", client=client, timeout=15)
     except httpx.TimeoutException:
         log.warning("mempool.space timeout")
         return {"error": "Request timed out", "source": "mempool.space"}
@@ -115,12 +113,12 @@ async def fetch_btc_network_stats() -> dict | None:
     """
     try:
         async with httpx.AsyncClient() as client:
-            hr_resp = await client.get(f"{BASE_URL}/v1/mining/hashrate/3d", timeout=15)
-            hr_resp.raise_for_status()
-            tip_resp = await client.get(f"{BASE_URL}/blocks/tip/height", timeout=15)
-            tip_resp.raise_for_status()
-            hashrate_data = hr_resp.json()
-            tip_height = int(tip_resp.text)
+            hashrate_data = await http.fetch_json(
+                f"{BASE_URL}/v1/mining/hashrate/3d", client=client, timeout=15
+            )
+            tip_height = int(
+                await http.fetch_text(f"{BASE_URL}/blocks/tip/height", client=client, timeout=15)
+            )
     except Exception as e:  # provider contract: never raise
         log.warning("mempool.space network-stats fallback failed: %s", e)
         return None
