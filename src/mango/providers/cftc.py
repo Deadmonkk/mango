@@ -30,6 +30,28 @@ _MARKET_MAP = {
     "wti": "CRUDE OIL, LIGHT SWEET - NEW YORK MERCANTILE EXCHANGE",
 }
 
+# Markets where listed futures are a small fraction of total activity, so the
+# "commercial = smart money" premise the whole report leans on doesn't hold.
+# Spot/forward/swap FX trades OTC in volume that dwarfs CME futures — this is
+# a dataset-representativeness problem, not something a threshold/lookback
+# tweak can fix.
+_STRUCTURALLY_UNRELIABLE = {
+    "eurusd": (
+        "COT positioning is structurally unreliable for FX: listed currency futures are a "
+        "small fraction of total EUR/USD activity, which trades OTC (spot/forward/swap) in "
+        "volume that dwarfs CME futures. The commercial-net signal below reflects only the "
+        "futures-market slice, not the market that actually sets price — read it as low-confidence "
+        "context, not a positioning edge."
+    ),
+}
+
+_TIMING_CAVEAT = (
+    "Commercial positioning tends to reach bullish extremes ~2 weeks before price bottoms and "
+    "bearish extremes ~2 weeks before price tops, but this report itself lags ~3 weeks behind "
+    "real-time positioning. Hedgers build/unwind extremes over multiple weeks, so the signal stays "
+    "valid past the reporting lag — treat this as a slow, multi-week gauge, never a timing trigger."
+)
+
 
 def _net(record: dict, long_field: str, short_field: str) -> tuple[int, int, int]:
     long_pos = int(record[long_field])
@@ -55,8 +77,11 @@ async def get_cot_report(market: str) -> dict:
     Returns:
         Dict with open interest and net positioning (long - short) for
         commercials, large speculators, and small speculators, including
-        week-over-week change, a fixed-threshold crowding signal, and each
-        group's net-of-OI percentile vs ~5 years of that market's own history.
+        week-over-week change, a fixed-threshold crowding signal, each
+        group's net-of-OI percentile vs ~5 years of that market's own history,
+        a timing_caveat (report lag vs commercial lead time), and a
+        reliability_caveat (non-null for markets like FX where listed futures
+        don't represent the real market).
     """
     market_key = market.lower()
     market_name = _MARKET_MAP.get(market_key)
@@ -174,6 +199,8 @@ async def get_cot_report(market: str) -> dict:
         "history_start_date": history_start_date,
         "signal": signal,
         "percentile_signal": percentile_signal,
+        "timing_caveat": _TIMING_CAVEAT,
+        "reliability_caveat": _STRUCTURALLY_UNRELIABLE.get(market_key),
         "note": (
             "Net = long - short. Commercials are typically 'smart money' hedgers; large "
             "speculators are funds/CTAs; small speculators are retail. 'signal' uses a fixed "
