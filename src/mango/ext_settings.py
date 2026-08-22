@@ -100,6 +100,9 @@ CORRELATION_REGIME_LONG_DAYS = _from_upstream("CORRELATION_REGIME_LONG_DAYS", 90
 CORRELATION_REGIME_SHIFT_DELTA = _from_upstream("CORRELATION_REGIME_SHIFT_DELTA", 0.30)
 CORRELATION_REGIME_SHORT_DAYS = _from_upstream("CORRELATION_REGIME_SHORT_DAYS", 21)
 COT_LARGE_SPEC_EXTREME_RATIO = _from_upstream("COT_LARGE_SPEC_EXTREME_RATIO", 0.20)
+# ~5 years of weekly reports — enough for a percentile rank to mean something
+# without ballooning the payload. CFTC's Socrata endpoint serves this in one call.
+COT_HISTORY_LIMIT = _from_upstream("COT_HISTORY_LIMIT", 260)
 DEFILLAMA_RATE_LIMIT = _from_upstream("DEFILLAMA_RATE_LIMIT", 30)
 ERP_THIN_CUSHION_PP = _from_upstream("ERP_THIN_CUSHION_PP", 2.0)
 ETF_FLOWS_DEFAULT_DAYS = _from_upstream("ETF_FLOWS_DEFAULT_DAYS", 10)

@@ -51,6 +51,39 @@ async def test_regime_history_buckets_forward_returns():
     band = crypto["by_band"]["Bottom-forming"]
     assert band["n"] == 1
     assert band["avg_forward_return_pct"] == 30.0  # +30% over 30 days
+    # A single sample has no spread — stdev/stderr are undefined, not fabricated.
+    assert band["stdev_pct"] is None
+    assert band["stderr_pct"] is None
+
+
+async def test_regime_history_band_stderr_with_multiple_samples():
+    # Two snapshots landing in the same band with different realized returns,
+    # so stdev/stderr become computable (n=2).
+    snaps = [
+        {"date": "2026-01-01", "crypto_regime": 70, "equity_regime": 42},
+        {"date": "2026-01-02", "crypto_regime": 72, "equity_regime": 42},
+    ]
+    btc = _price_series("2026-01-01", 150, 100.0, 1.0)  # steady rise, ~30% by day 30
+    spx = _price_series("2026-01-01", 150, 5000.0, 0.0)
+
+    async def fake_get(symbol, **kwargs):
+        return btc if symbol == "BTC-USD" else spx
+
+    with (
+        patch.object(regime_history, "latest_snapshot_per_day", return_value=snaps),
+        patch.object(regime_history.historical, "get_historical", new=AsyncMock(side_effect=fake_get)),
+        patch("mango.analytics.regime_history.date") as mock_date,
+    ):
+        from datetime import date as real_date
+
+        mock_date.today.return_value = real_date(2026, 6, 1)
+        mock_date.side_effect = lambda *a, **k: real_date(*a, **k)
+        result = await regime_history.get_regime_history(forward_days=30)
+
+    band = result["scores"]["crypto_regime"]["by_band"]["Bottom-forming"]
+    assert band["n"] == 2
+    assert band["stdev_pct"] is not None
+    assert band["stderr_pct"] == round(band["stdev_pct"] / (2**0.5), 2)
 
 
 async def test_regime_history_no_snapshots():

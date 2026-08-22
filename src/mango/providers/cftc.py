@@ -1,12 +1,21 @@
-"""CFTC Commitment of Traders provider — futures positioning, free and unauthenticated."""
+"""CFTC Commitment of Traders provider — futures positioning, free and unauthenticated.
+
+Positioning normalization: a raw net-contracts figure (or even net as a % of
+open interest) means little on its own — what matters is how crowded that
+positioning is *relative to the market's own history*. Every report ranks
+today's large-speculator and commercial skew against ~5 years of weekly
+reports pulled in the same call, the same way get_metric_context ranks a
+FRED series against its own history.
+"""
 
 import httpx
 
+from mango.analytics.percentiles import percentile_rank
 from mango.core import http
 from mango.core.logging import log
 
 from mango.core import cache
-from mango.ext_settings import CACHE_TTL_COT, COT_LARGE_SPEC_EXTREME_RATIO
+from mango.ext_settings import CACHE_TTL_COT, COT_HISTORY_LIMIT, COT_LARGE_SPEC_EXTREME_RATIO
 
 BASE_URL = "https://publicreporting.cftc.gov/resource/6dca-aqww.json"
 
@@ -28,6 +37,15 @@ def _net(record: dict, long_field: str, short_field: str) -> tuple[int, int, int
     return long_pos, short_pos, long_pos - short_pos
 
 
+def _pct_of_oi(record: dict, long_field: str, short_field: str) -> float | None:
+    """Net position (long - short) for one group, as a % of that report's open interest."""
+    oi = int(record.get("open_interest_all", 0))
+    if not oi:
+        return None
+    _, _, net = _net(record, long_field, short_field)
+    return net / oi * 100
+
+
 async def get_cot_report(market: str) -> dict:
     """Get CFTC Commitment of Traders positioning for a market.
 
@@ -37,7 +55,8 @@ async def get_cot_report(market: str) -> dict:
     Returns:
         Dict with open interest and net positioning (long - short) for
         commercials, large speculators, and small speculators, including
-        week-over-week change and a crowding signal.
+        week-over-week change, a fixed-threshold crowding signal, and each
+        group's net-of-OI percentile vs ~5 years of that market's own history.
     """
     market_key = market.lower()
     market_name = _MARKET_MAP.get(market_key)
@@ -56,7 +75,7 @@ async def get_cot_report(market: str) -> dict:
     params = {
         "$where": f"market_and_exchange_names='{market_name}'",
         "$order": "report_date_as_yyyy_mm_dd DESC",
-        "$limit": "2",
+        "$limit": str(COT_HISTORY_LIMIT),
     }
 
     try:
@@ -92,6 +111,7 @@ async def get_cot_report(market: str) -> dict:
         small_net_change = small_net - prior_small_net
 
     large_spec_pct_of_oi = round(large_net / open_interest * 100, 2) if open_interest else None
+    commercial_pct_of_oi = round(comm_net / open_interest * 100, 2) if open_interest else None
 
     signal = "neutral — large speculator positioning within normal range"
     if large_spec_pct_of_oi is not None:
@@ -100,6 +120,33 @@ async def get_cot_report(market: str) -> dict:
             signal = f"crowded long — large speculators net long {large_spec_pct_of_oi}% of open interest"
         elif large_spec_pct_of_oi < -threshold_pct:
             signal = f"crowded short — large speculators net short {abs(large_spec_pct_of_oi)}% of open interest"
+
+    # Normalize against the market's own history: a raw net-of-OI figure is close
+    # to meaningless on its own — the signal is where it ranks vs its own past.
+    large_history = [v for v in (_pct_of_oi(r, "noncomm_positions_long_all", "noncomm_positions_short_all") for r in data) if v is not None]
+    comm_history = [v for v in (_pct_of_oi(r, "comm_positions_long_all", "comm_positions_short_all") for r in data) if v is not None]
+    large_spec_percentile = percentile_rank(large_history, large_spec_pct_of_oi) if large_spec_pct_of_oi is not None else None
+    commercial_percentile = percentile_rank(comm_history, commercial_pct_of_oi) if commercial_pct_of_oi is not None else None
+    history_observations = len(data)
+    history_start_date = data[-1]["report_date_as_yyyy_mm_dd"][:10] if data else None
+
+    percentile_signal = None
+    if large_spec_percentile is not None:
+        if large_spec_percentile >= 90:
+            percentile_signal = (
+                f"large speculators at the {large_spec_percentile}th percentile of net-long positioning "
+                f"over {history_observations} weeks since {history_start_date} — historically crowded long"
+            )
+        elif large_spec_percentile <= 10:
+            percentile_signal = (
+                f"large speculators at the {large_spec_percentile}th percentile of net-long positioning "
+                f"over {history_observations} weeks since {history_start_date} — historically crowded short"
+            )
+        else:
+            percentile_signal = (
+                f"large speculators at the {large_spec_percentile}th percentile vs "
+                f"{history_observations} weeks of history — unremarkable"
+            )
 
     result = {
         "market": market_key,
@@ -120,8 +167,20 @@ async def get_cot_report(market: str) -> dict:
             "net_change": small_net_change,
         },
         "large_spec_pct_of_oi": large_spec_pct_of_oi,
+        "commercial_pct_of_oi": commercial_pct_of_oi,
+        "large_spec_pct_of_oi_percentile": large_spec_percentile,
+        "commercial_pct_of_oi_percentile": commercial_percentile,
+        "history_observations": history_observations,
+        "history_start_date": history_start_date,
         "signal": signal,
-        "note": "Net = long - short. Commercials are typically 'smart money' hedgers; large speculators are funds/CTAs; small speculators are retail.",
+        "percentile_signal": percentile_signal,
+        "note": (
+            "Net = long - short. Commercials are typically 'smart money' hedgers; large "
+            "speculators are funds/CTAs; small speculators are retail. 'signal' uses a fixed "
+            f"±{COT_LARGE_SPEC_EXTREME_RATIO * 100:.0f}%-of-OI threshold; 'percentile_signal' ranks "
+            "today's positioning against the market's own history instead — the raw net level "
+            "means little without that context."
+        ),
         "source": "cftc",
     }
     cache.set(cache_key, result, CACHE_TTL_COT)

@@ -118,3 +118,36 @@ async def test_get_cot_report_cache_hit():
 
     assert first == second
     assert fetch.call_count == 1, "second call must be served from cache, not refetched"
+
+
+def _record(date: str, oi: int, noncomm_long: int, noncomm_short: int) -> dict:
+    """A minimal history record with the fields the percentile calc reads."""
+    return {
+        "market_and_exchange_names": "BITCOIN - CHICAGO MERCANTILE EXCHANGE",
+        "report_date_as_yyyy_mm_dd": f"{date}T00:00:00.000",
+        "open_interest_all": str(oi),
+        "noncomm_positions_long_all": str(noncomm_long),
+        "noncomm_positions_short_all": str(noncomm_short),
+        "comm_positions_long_all": "1000",
+        "comm_positions_short_all": "1000",
+        "nonrept_positions_long_all": "100",
+        "nonrept_positions_short_all": "100",
+    }
+
+
+async def test_get_cot_report_percentile_context():
+    """Large-spec positioning is ranked against its own multi-week history, not just today's OI."""
+    # 9 quiet weeks (net-long ~10% of OI) followed by today's outlier (net-long 90% of OI).
+    quiet = [_record(f"2026-01-{d:02d}", 10_000, 5_500, 4_500) for d in range(2, 11)]
+    today = _record("2026-01-16", 10_000, 9_500, 500)  # net = 9000, 90% of OI
+    history = [today] + list(reversed(quiet))  # DESC order, latest first
+
+    with patch("mango.providers.cftc.http.fetch_json", AsyncMock(return_value=history)):
+        result = await cftc.get_cot_report("btc")
+
+    assert result["history_observations"] == 10
+    assert result["history_start_date"] == "2026-01-02"
+    assert result["large_spec_pct_of_oi_percentile"] == 100.0
+    assert "percentile_signal" in result
+    assert "crowded long" in result["percentile_signal"]
+    assert "commercial_pct_of_oi_percentile" in result

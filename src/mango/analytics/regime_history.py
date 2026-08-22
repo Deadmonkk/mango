@@ -9,6 +9,7 @@ assets you watch. Early on the sample is tiny; the tool says so rather than
 pretending a handful of points is signal.
 """
 
+import statistics
 from datetime import date, datetime, timedelta
 
 from mango.core.logging import log
@@ -30,6 +31,28 @@ _SERIES = {
     "crypto_regime": ("BTC-USD", "BTC"),
     "equity_regime": ("^GSPC", "S&P 500"),
 }
+
+
+def _band_stats(returns: list[float]) -> dict:
+    """Summarize one band's realized forward returns with a dispersion measure.
+
+    A bare average overstates precision at low N — the standard error
+    (stdev / sqrt(n)) says how much that average could plausibly move once
+    more samples mature, so a report can say "avg X% (+/- Y%, n=Z)" instead
+    of a point estimate that looks more confident than the sample supports.
+    Both are None below n=2, where a spread isn't computable.
+    """
+    n = len(returns)
+    avg = round(sum(returns) / n, 2)
+    stdev = round(statistics.stdev(returns), 2) if n >= 2 else None
+    stderr = round(stdev / (n**0.5), 2) if stdev is not None else None
+    return {
+        "n": n,
+        "avg_forward_return_pct": avg,
+        "stdev_pct": stdev,
+        "stderr_pct": stderr,
+        "returns": returns,
+    }
 
 
 def _band(score: float) -> str:
@@ -127,14 +150,7 @@ async def get_regime_history(forward_days: int = 30) -> dict:
             matured += 1
 
         matured_total += matured
-        band_summary = {
-            band: {
-                "n": len(rets),
-                "avg_forward_return_pct": round(sum(rets) / len(rets), 2),
-                "returns": rets,
-            }
-            for band, rets in sorted(buckets.items())
-        }
+        band_summary = {band: _band_stats(rets) for band, rets in sorted(buckets.items())}
         output[score_key] = {
             "forward_symbol": label,
             "matured_samples": matured,
@@ -151,14 +167,23 @@ async def get_regime_history(forward_days: int = 30) -> dict:
         )
     elif matured_total < 10:
         maturity = (
-            f"Only {matured_total} matured sample(s) — directional at best, NOT statistically "
-            "meaningful. Treat as a developing track record, not a backtest."
+            f"Only {matured_total} matured sample(s) — anecdotal, NOT statistically meaningful. "
+            "Treat as a developing track record, not a backtest; per-band stderr is mostly "
+            "undefined or huge at this size."
+        )
+    elif matured_total < 30:
+        maturity = (
+            f"{matured_total} matured samples — a thin but real sample. Per-band averages are "
+            "directional; weight the stderr on each band before reading a gap between bands as "
+            "signal rather than noise."
         )
     else:
         maturity = (
             f"{matured_total} matured samples. Compare the bottom-forming/deep-value bands "
             "against the euphoric band: higher forward returns from the high-score bands would "
-            "validate the scoring; the reverse would say the weights need tuning."
+            "validate the scoring; the reverse would say the weights need tuning. Check each "
+            "band's stderr — a gap smaller than ~2x the combined stderr is not distinguishable "
+            "from noise at this sample size."
         )
 
     return {
@@ -169,7 +194,10 @@ async def get_regime_history(forward_days: int = 30) -> dict:
         "note": (
             "Forward return = percent move in the mapped asset from the snapshot date to "
             f"{forward_days} days later. Bands mirror the FR scoring rubric. Higher score = "
-            "more bottom-like; the hypothesis is that higher-score bands earn higher forward returns."
+            "more bottom-like; the hypothesis is that higher-score bands earn higher forward returns. "
+            "Each band's stderr_pct (stdev / sqrt(n), None below n=2) is how much the average could "
+            "plausibly move as more samples mature — report it alongside avg_forward_return_pct rather "
+            "than the point estimate alone."
         ),
         "source": "regime_history (local + yahoo)",
     }
