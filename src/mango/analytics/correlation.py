@@ -17,10 +17,10 @@ CORRELATION_WINDOW = 90
 DECOUPLED_THRESHOLD = 0.1
 
 
-async def _fetch_closes(ticker: str) -> list[float]:
+async def _fetch_closes(ticker: str, period: str = "6mo") -> list[float]:
     try:
         t = yfinance.Ticker(ticker)
-        hist = await asyncio.to_thread(t.history, period="6mo", interval="1d")
+        hist = await asyncio.to_thread(t.history, period=period, interval="1d")
         if hist.empty:
             return []
         return [float(c) for c in hist["Close"].dropna().tolist()]

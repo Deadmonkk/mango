@@ -99,6 +99,24 @@ CLIMATE_TEMP_ANOMALY_WATCH_C = _from_upstream("CLIMATE_TEMP_ANOMALY_WATCH_C", 2.
 CORRELATION_REGIME_LONG_DAYS = _from_upstream("CORRELATION_REGIME_LONG_DAYS", 90)
 CORRELATION_REGIME_SHIFT_DELTA = _from_upstream("CORRELATION_REGIME_SHIFT_DELTA", 0.30)
 CORRELATION_REGIME_SHORT_DAYS = _from_upstream("CORRELATION_REGIME_SHORT_DAYS", 21)
+# Stress-conditioned coupling (Phase 1, added 2026-08-21): does the basket
+# couple more tightly specifically on the pivot's worst days? Needs a longer
+# pull than the shift-detector above, both for stress-day sample size within
+# the current read and to build a rolling distribution to rank it against.
+CORRELATION_REGIME_HISTORY_PERIOD = _from_upstream("CORRELATION_REGIME_HISTORY_PERIOD", "2y")
+CORRELATION_REGIME_STRESS_PIVOT = _from_upstream("CORRELATION_REGIME_STRESS_PIVOT", "SPY")
+CORRELATION_REGIME_STRESS_PERCENTILE = _from_upstream("CORRELATION_REGIME_STRESS_PERCENTILE", 10.0)
+CORRELATION_REGIME_STRESS_WINDOW_DAYS = _from_upstream("CORRELATION_REGIME_STRESS_WINDOW_DAYS", 180)
+CORRELATION_REGIME_MIN_STRESS_DAYS = _from_upstream("CORRELATION_REGIME_MIN_STRESS_DAYS", 15)
+CORRELATION_REGIME_ROLLING_STEP_DAYS = _from_upstream("CORRELATION_REGIME_ROLLING_STEP_DAYS", 10)
+CORRELATION_REGIME_MIN_ROLLING_SAMPLES = _from_upstream("CORRELATION_REGIME_MIN_ROLLING_SAMPLES", 10)
+# Absolute correlation-unit thresholds for the assessment's plain-English band.
+# Anchored on the ABSOLUTE widening, not the amplification ratio: a ratio can
+# look extreme off a near-zero baseline (0.02 -> 0.03 is technically "1.5x")
+# while meaning nothing economically — the ratio is a supporting field, not
+# the thing that decides the headline language.
+CORRELATION_REGIME_STRESS_WIDENING_MODERATE = _from_upstream("CORRELATION_REGIME_STRESS_WIDENING_MODERATE", 0.05)
+CORRELATION_REGIME_STRESS_WIDENING_SHARP = _from_upstream("CORRELATION_REGIME_STRESS_WIDENING_SHARP", 0.15)
 COT_LARGE_SPEC_EXTREME_RATIO = _from_upstream("COT_LARGE_SPEC_EXTREME_RATIO", 0.20)
 # ~5 years of weekly reports — enough for a percentile rank to mean something
 # without ballooning the payload. CFTC's Socrata endpoint serves this in one call.
