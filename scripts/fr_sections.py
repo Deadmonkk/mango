@@ -261,6 +261,17 @@ SECTIONS: tuple[Section, ...] = (
         Field("Coupling recent (~1mo)", "correlation_regime", "avg_coupling_recent"),
         Field("Coupling baseline (~1q)", "correlation_regime", "avg_coupling_baseline"),
         Field("Correlation avg |Δ|", "correlation_regime", "avg_abs_delta"),
+        # Phase 1 stress-conditioned coupling (2026-08-21): does this basket couple
+        # unusually tightly specifically on SPY's worst days, and how unusual is
+        # that widening vs its own rolling history. See analytics/correlation_regime.py.
+        Field("Stress definition", "correlation_regime", "stress_definition"),
+        Field("Normal coupling", "correlation_regime", "normal_coupling"),
+        Field("Stress coupling", "correlation_regime", "stress_coupling"),
+        Field("Stress widening", "correlation_regime", "stress_widening"),
+        Field("Stress amplification ratio", "correlation_regime", "stress_amplification_ratio"),
+        Field("Stress widening percentile", "correlation_regime", "stress_widening_percentile"),
+        Field("Stress day count", "correlation_regime", "stress_day_count"),
+        Field("Stress-conditioned assessment", "correlation_regime", "assessment"),
         Field("COT S&P 500 large-spec net", "cot_report_sp500", "large_speculators.net",
               read_path="signal"),
         Field("COT S&P 500 spec % of OI", "cot_report_sp500", "large_spec_pct_of_oi", PCT),
