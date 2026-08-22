@@ -151,3 +151,23 @@ async def test_get_cot_report_percentile_context():
     assert "percentile_signal" in result
     assert "crowded long" in result["percentile_signal"]
     assert "commercial_pct_of_oi_percentile" in result
+
+
+async def test_get_cot_report_timing_caveat_always_present():
+    """Every market carries the reporting-lag-vs-lead-time caveat, not just flagged ones."""
+    with patch("mango.providers.cftc.http.fetch_json", AsyncMock(return_value=[_LATEST, _PRIOR])):
+        result = await cftc.get_cot_report("btc")
+
+    assert "2 weeks" in result["timing_caveat"]
+    assert "3 weeks" in result["timing_caveat"]
+
+
+async def test_get_cot_report_reliability_caveat_flags_eurusd():
+    """EUR/USD gets a structural-unreliability warning; a commodity market does not."""
+    with patch("mango.providers.cftc.http.fetch_json", AsyncMock(return_value=[_LATEST, _PRIOR])):
+        eurusd_result = await cftc.get_cot_report("eurusd")
+        gold_result = await cftc.get_cot_report("gold")
+
+    assert eurusd_result["reliability_caveat"] is not None
+    assert "OTC" in eurusd_result["reliability_caveat"]
+    assert gold_result["reliability_caveat"] is None
