@@ -91,6 +91,13 @@ def _site_interpreter() -> str | None:
     puts the mango venv first on PATH, and that venv has no `markdown`. The site
     builder belongs to a different project with its own dependencies, so the
     interpreter is chosen by capability rather than assumed.
+
+    Probes for `mango` alongside `markdown`: an interpreter with `markdown` but
+    no `mango` install still "passes" the site build (no exception — build_site.py
+    catches the ImportError itself and degrades to an empty climate payload), so
+    checking `markdown` alone silently picked /opt/homebrew's python3 for months
+    while its `mango` install was stale, and every climate.html render came out
+    "0/0 regions" with no error anywhere in the pipeline. Found 2026-08-22.
     """
     candidates = [
         shutil.which("python3", path="/opt/homebrew/bin:/usr/local/bin:/usr/bin"),
@@ -101,7 +108,7 @@ def _site_interpreter() -> str | None:
         if not candidate or not Path(candidate).exists():
             continue
         probe = subprocess.run(
-            [candidate, "-c", "import markdown"], capture_output=True
+            [candidate, "-c", "import markdown, mango.providers.climate"], capture_output=True
         )
         if probe.returncode == 0:
             return candidate
