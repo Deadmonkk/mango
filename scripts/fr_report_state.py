@@ -6,9 +6,9 @@ The collector writes ``YYYY-MM-DD-fr.md`` into the reports folder as its FIRST
 action, with empty prose slots. So an unverified — indeed unwritten — report sits
 where the site builder looks for several minutes of every run. That is a
 publication race, not a token problem, and ordering alone cannot fix it: the FR
-run is not the only thing that rebuilds the site. The niche, gex, crypto, credit,
-cre-weather and nepal agents all call ``build_site.py`` too, and any of them
-firing mid-FR would publish a half-written report.
+run is not the only thing that rebuilds the site. Other report generators call
+``build_site.py`` too, and any of them firing mid-FR would publish a
+half-written report.
 
 Two independent checks ("no unfilled markers" AND "a stamp exists") would drift
 apart over time. Instead there is one state, derived from the file itself:
