@@ -357,6 +357,8 @@ SECTIONS: tuple[Section, ...] = (
         Field("Calls settled", "grade_predictions", "totals.settled"),
         Field("Correct", "grade_predictions", "totals.correct"),
         Field("Accuracy", "grade_predictions", "totals.accuracy_pct", PCT),
+        Field("If we always predicted up", "grade_predictions", "totals.always_up_pct", PCT),
+        Field("Difference vs always predicting up", "grade_predictions", "totals.edge_pp", PP),
         Field("Still open", "grade_predictions", "totals.still_open"),
     )),
 )
@@ -411,6 +413,8 @@ EOD_SECTIONS: tuple[Section, ...] = (
         Field("Calls settled", "grade_predictions", "totals.settled"),
         Field("Correct", "grade_predictions", "totals.correct"),
         Field("Accuracy", "grade_predictions", "totals.accuracy_pct", PCT),
+        Field("If we always predicted up", "grade_predictions", "totals.always_up_pct", PCT),
+        Field("Difference vs always predicting up", "grade_predictions", "totals.edge_pp", PP),
         Field("Still open", "grade_predictions", "totals.still_open"),
     )),
 )

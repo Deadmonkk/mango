@@ -23,6 +23,7 @@ invents anything: a missing value renders as the FAIL sentinel and stays missing
 from __future__ import annotations
 
 import datetime as dt
+import math
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -273,6 +274,8 @@ class Section:
 
 def fmt_value(v: Any, unit: str, decimals: int) -> str:
     if v is None:
+        return FAIL
+    if is_num(v) and math.isnan(v):
         return FAIL
     if is_num(v):
         r = round(float(v), decimals)

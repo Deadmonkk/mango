@@ -74,6 +74,22 @@ def _settle(direction: str, baseline: float, current: float) -> bool | None:
     return None
 
 
+def _always_up_pct(settled: list[dict]) -> float | None:
+    """Hit rate of a naive model that calls "up" every time, over the same calls.
+
+    Raw accuracy flatters a ledger of mostly-up calls in a rising market: it
+    measures the market, not the model. Accuracy minus this is the edge.
+    """
+    moves = [
+        p["outcome"]["current"] > p["outcome"]["baseline"]
+        for p in settled
+        if isinstance(p.get("outcome"), dict)
+        and p["outcome"].get("current") is not None
+        and p["outcome"].get("baseline")
+    ]
+    return sum(moves) / len(moves) * 100 if moves else None  # unrounded: callers round once
+
+
 async def grade_open_predictions() -> dict:
     """Settle every open prediction whose due date has passed.
 
@@ -155,6 +171,9 @@ async def grade_open_predictions() -> dict:
     correct_n = sum(1 for p in settled if p["status"] == "correct")
     accuracy = round(correct_n / len(settled) * 100, 1) if settled else None
     open_n = sum(1 for p in load_predictions() if p.get("status") == "open")
+    raw_up = _always_up_pct(settled)
+    always_up = round(raw_up, 1) if raw_up is not None else None
+    edge = round(correct_n / len(settled) * 100 - raw_up, 1) if settled and raw_up is not None else None
 
     return {
         "newly_graded": newly_graded,
@@ -164,12 +183,14 @@ async def grade_open_predictions() -> dict:
             "incorrect": len(settled) - correct_n,
             "still_open": open_n,
             "accuracy_pct": accuracy,
+            "always_up_pct": always_up,
+            "edge_pp": edge,
         },
         "note": (
             "Each call settles on the close at its DUE date (or the last trading day before "
             "it), not the price on the day grading ran — so a late grading run still measures "
             "the horizon that was actually predicted. Accuracy = correct / settled across the "
-            "whole ledger. A small sample is anecdote, not a track record. Predictions with no "
+            "whole ledger. always_up_pct = what calling up every time would have scored on the same calls; edge_pp = accuracy minus that — the part of the record the model earned rather than the market. A small sample is anecdote, not a track record. Predictions with no "
             "baseline/symbol, or an unrecognised direction, are marked 'ungraded' and excluded. "
             "Use this to weight which signals to trust: persistently wrong calls argue for "
             "down-weighting their source signal."

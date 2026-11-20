@@ -155,3 +155,34 @@ async def test_unrecognised_direction_is_ungraded_not_incorrect():
 )
 def test_period_ladder_reaches_far_enough_back(days_back, expected):
     assert prediction_grader._period_for(days_back) == expected
+
+
+async def test_totals_report_edge_over_always_up_baseline():
+    """Accuracy alone flatters a ledger of mostly-up calls in a rising market.
+
+    Three calls, and the asset rose in two of them. Saying "up" every time would
+    have scored 66.7%; this ledger scored 33.3%, so its edge is -33.3pp.
+    """
+    history.log_prediction("up, rose", "A", "up", horizon_days=-5, baseline=100.0)
+    history.log_prediction("down, rose", "B", "down", horizon_days=-5, baseline=100.0)
+    history.log_prediction("up, fell", "C", "up", horizon_days=-5, baseline=100.0)
+    closes = {"A": 110.0, "B": 110.0, "C": 90.0}
+
+    async def fake_hist(symbol, *args, **kwargs):
+        return _hist(closes[symbol])
+
+    with patch.object(prediction_grader.historical, "get_historical", new=AsyncMock(side_effect=fake_hist)):
+        result = await prediction_grader.grade_open_predictions()
+
+    totals = result["totals"]
+    assert totals["accuracy_pct"] == 33.3
+    assert totals["always_up_pct"] == 66.7
+    assert totals["edge_pp"] == -33.3
+
+
+async def test_edge_is_none_when_nothing_settled():
+    history.log_prediction("future", "BTC-USD", "up", horizon_days=30, baseline=100.0)
+    with patch.object(prediction_grader.historical, "get_historical", new=AsyncMock(return_value=_hist(130.0))):
+        result = await prediction_grader.grade_open_predictions()
+    assert result["totals"]["always_up_pct"] is None
+    assert result["totals"]["edge_pp"] is None
