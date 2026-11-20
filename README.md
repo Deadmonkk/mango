@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.png" alt="Mango logo" width="140">
+</p>
+
 # Mango
 
 [![tests](https://github.com/Deadmonkk/mango/actions/workflows/tests.yml/badge.svg)](https://github.com/Deadmonkk/mango/actions/workflows/tests.yml)
