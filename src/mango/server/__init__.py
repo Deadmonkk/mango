@@ -12,11 +12,9 @@ is the single line that is actually specific to it: which provider to call.
 
 TOOL NAMES ARE FUNCTIONAL IDENTIFIERS
 -------------------------------------
-`~/.claude.json` and the FR/EOD report playbooks call these tools by name, so a
-rename is never cosmetic — it breaks every report until both are updated in the
-same change. The `terminalq_` prefix was dropped once, deliberately and in
-lockstep with the config key and the playbooks; the server prefix now carries
-the name, so the tools themselves are unprefixed.
+Claude Code config and report playbooks call these tools by name, so a rename is
+never cosmetic. The server prefix carries the name, so the tools themselves are
+unprefixed.
 
 INTROSPECTION DOES NOT AUDIT ITSELF
 -----------------------------------
@@ -139,18 +137,13 @@ def main() -> None:
         tools_reports,
     )
 
-    # Create the data directory (and migrate a pre-rename one) before any tool
+    # Create the data directory before any tool
     # can be called. A fresh clone has no ~/.mango, and failing on first use
     # with a missing-directory error is a bad first impression for something
     # the program can simply create.
     state = paths.bootstrap()
     if state["created"]:
         log.info("initialised data directory at %s", state["home"])
-    if state["migration"].get("migrated"):
-        log.info(
-            "migrated existing data from %s (the original was copied, not moved)",
-            state["migration"]["source"],
-        )
 
     log.info("Mango MCP server starting with %d tools", len(mcp._tool_manager._tools))
     mcp.run()

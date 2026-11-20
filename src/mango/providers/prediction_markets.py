@@ -1,7 +1,7 @@
 """Prediction-market odds from Polymarket (Gamma public-search, free, no key).
 
 Prediction markets price real-money probabilities for future events — a useful
-cross-check on model-implied reads. When the TerminalQ Fed-path tool says one
+cross-check on model-implied reads. When the Fed-path tool says one
 thing and Polymarket's "rate cut by X" market says another, that divergence is
 itself a signal: someone is wrong, and it is worth knowing who.
 """

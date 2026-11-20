@@ -1,13 +1,7 @@
 """FRED extensions — themed dashboards, full history, and percentile context.
 
-Everything here is this pack's own work. It lives in its own module rather than
-inside upstream's ``fred.py`` for two reasons: the pack must be publishable
-without vendoring upstream files, and CI reconstructs a CLEAN upstream checkout,
-so anything added to an upstream file simply does not exist when the suite runs.
-
-Builds on upstream's ``fred.get_series`` for the actual HTTP calls; the aliases
-these dashboards use are registered in ``SERIES_MAP`` below and merged into
-upstream's map on import.
+Builds on ``mango.core.fred.get_series`` for the actual HTTP calls; the aliases
+these dashboards use are registered in ``SERIES_MAP`` below.
 """
 from __future__ import annotations
 
@@ -20,8 +14,7 @@ from mango.ext_settings import CACHE_TTL_ECONOMIC, FRED_API_KEY
 from mango.core.logging import log
 from mango.core.fred import BASE_URL, SERIES_MAP, _resolve_series_id, get_series
 
-# Aliases this pack adds. Merged into upstream's SERIES_MAP on import so
-# `get_series("hy_spread")` resolves without upstream having to know about them.
+# Series aliases, merged into SERIES_MAP on import so `get_series("hy_spread")` resolves.
 EXTRA_SERIES = {
     # --- CPI components ---
     "cpi_shelter": "CUSR0000SAH1",
@@ -66,44 +59,6 @@ EXTRA_SERIES = {
 }
 
 SERIES_MAP.update(EXTRA_SERIES)
-
-
-def _register_aliases_with_host() -> None:
-    """Also register these aliases with the host project's series map, if present.
-
-    TRANSITIONAL — remove once the host's own FRED client is gone (Phase 5).
-
-    Before this pack owned its FRED client, updating the shared map was what let
-    the host's `get_series` resolve aliases like "hy_spread" too, which its MCP
-    tools rely on. Now that registration lands on the owned map, the host would
-    silently pass "hy_spread" through as a literal series ID and query FRED for
-    something that does not exist.
-
-    The import is deliberately optional: this pack must stay importable with no
-    host present, so a missing host is a normal outcome, not an error.
-    """
-    try:
-        from terminalq.providers import fred as _host_fred
-    except ImportError:
-        return
-    host_map = getattr(_host_fred, "SERIES_MAP", None)
-    if isinstance(host_map, dict):
-        host_map.update(EXTRA_SERIES)
-
-
-_register_aliases_with_host()
-
-
-# ORIGIN NOTE
-#
-#
-# These eleven functions were lost when this file was reverted to upstream
-# state while carrying uncommitted local work. They are rebuilt from the
-# surviving specification: the test suite (tests/test_fred.py,
-# test_metric_context.py, test_release_calendar.py) and the exact output
-# shapes recorded in ~/Desktop/market-reports/.briefs/fr_raw_*.json.
-# Behaviour is pinned by those tests; series IDs are pinned by the `title`
-# strings in the saved payloads.
 # ===========================================================================
 
 # Dashboard groups: alias -> FRED series ID. Identified from the `title`

@@ -4,7 +4,7 @@ fr_collect.py — out-of-context data collector for the FR / EOD reports.
 
 WHY THIS EXISTS
 ---------------
-The FR report pulls ~50 TerminalQ sources. When the model calls those as MCP
+The FR report pulls ~50 Mango sources. When the model calls those as MCP
 tools, all ~50 verbose JSON blobs land in the model's context window (~25k
 tokens) and get re-sent every turn. This script runs the SAME provider
 functions deterministically, OUTSIDE the model context, and emits ONE compact
@@ -24,8 +24,8 @@ FIDELITY GUARANTEE (do not weaken):
 
 USAGE
 -----
-    uv run --directory /path/to/terminalq python scripts/fr_collect.py --mode fr
-    uv run --directory /path/to/terminalq python scripts/fr_collect.py --mode eod
+    uv run --directory /path/to/mango python scripts/fr_collect.py --mode fr
+    uv run --directory /path/to/mango python scripts/fr_collect.py --mode eod
 
 OUTPUT (written to $FR_BRIEF_DIR, default ~/market-reports/.briefs/):
     fr_raw_YYYY-MM-DD.json     full raw provider payloads (audit trail, git-ignored)
@@ -36,12 +36,6 @@ plain English, build the synthesis, reason the two regime scores, set watch-item
 write + save the report. All judgment/quality work stays with the model; only the
 raw-data transport is moved out of context.
 
-======================================================================
-BUILD STATUS: SKELETON. A fresh session must complete the TOOL_MAP by
-reading src/terminalq/server.py (each @mcp.tool() body shows which
-mango.providers.* function + args it calls) and wiring each FR source
-below to its provider call. The plumbing, brief writer, and failure handling
-are done. See FR_COLLECT_SPEC section at the bottom for the full field list.
 ======================================================================
 """
 
@@ -381,7 +375,7 @@ def derive(raw: dict) -> dict:
 def write_brief(raw: dict, derived: dict, mode: str, date: str) -> str:
     lines = [f"# {mode.upper()} DATA BRIEF — {date}", ""]
     lines.append(
-        "> Every value below is a live TerminalQ provider result from THIS run, "
+        "> Every value below is a live Mango provider result from THIS run, "
         "extracted by explicit field path. `data unavailable (source failed)` = "
         "that source failed; do NOT fill it from memory. GSCPI + last30days are EXTERNAL."
     )

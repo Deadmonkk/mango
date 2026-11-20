@@ -10,7 +10,7 @@ distinction expensive:
   they did not exist. 744 unit tests passed; nothing imported the collector.
 - 2026-08-07, the MCP server: the `mcp` dependency was declared `>=1.0.0` with
   no upper bound, a resolve took 2.x where `mcp.server.fastmcp` had moved, and
-  `python -m terminalq` failed at import. The already-running process masked it.
+  `python -m mango` failed at import. The already-running process masked it.
 
 There are progressively stronger levels of confidence, and each costs more:
 

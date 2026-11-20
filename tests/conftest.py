@@ -74,18 +74,10 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
 def _redirect_every_cache(monkeypatch, target) -> None:
     """Point every cache implementation on the path at `target`.
 
-    The owned cache is always present. A host project's cache is present only
-    in a wired checkout, so it is redirected opportunistically — hard-coding it
-    would break the standalone layout, and omitting it would let host-backed
-    tests write into the operator's real cache.
+    Tests must never write into the operator's real cache.
     """
     monkeypatch.setenv("CACHE_DIR", str(target))
     monkeypatch.setattr("mango.core.cache.CACHE_DIR", target)
-    try:
-        import terminalq.cache  # noqa: F401  (present only in a wired checkout)
-    except ImportError:
-        return
-    monkeypatch.setattr("terminalq.cache.CACHE_DIR", target)
 
 
 @pytest.fixture(autouse=True)

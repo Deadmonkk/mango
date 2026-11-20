@@ -59,7 +59,7 @@ TICKER_MAP_URL = "https://www.sec.gov/files/company_tickers.json"
 # environment so a real deployment supplies real contact details — the
 # hardcoded fallback still names the tool but will start drawing 403s under
 # sustained/production load since it carries no working contact address.
-DEFAULT_USER_AGENT = "TerminalQ-Mango/1.0 (research tool; contact: set SEC_USER_AGENT)"
+DEFAULT_USER_AGENT = "Mango/1.0 (research tool; contact: set SEC_USER_AGENT)"
 USER_AGENT: str = os.environ.get("SEC_USER_AGENT", DEFAULT_USER_AGENT)
 
 # SEC's documented fair-access limit is "no more than 10 requests per second
@@ -636,7 +636,7 @@ async def get_insider_transactions(symbol: str, limit: int = 20) -> dict:
         }
 
     Shape derived from a genuine saved payload
-    (``insider_transactions_NVDA`` in a TerminalQ FR run's raw audit trail).
+    (``insider_transactions_NVDA`` in an FR run's raw audit trail).
     Never raises.
     """
     async with httpx.AsyncClient() as client:
@@ -794,7 +794,7 @@ async def get_13f_holdings(institution: str, limit: int = 20) -> dict:
 
     ``report_date`` is the filing's *filing* date, not the holdings period
     end date — matching the shape of a genuine saved payload
-    (``13f_holdings_berkshire`` in a TerminalQ FR run's raw audit trail),
+    (``13f_holdings_berkshire`` in an FR run's raw audit trail),
     which carries the filing date under that key. Holdings are sorted by
     value, largest first, and truncated to ``limit``; ``pct_of_portfolio`` is
     computed against the filing's own declared *total* portfolio value, so it

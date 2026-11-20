@@ -1,6 +1,6 @@
 """Gilchrist-Zakrajsek credit spread + excess bond premium (Federal Reserve Board).
 
-Extracted into its own module so it does not live inside upstream TerminalQ files.
+Kept in its own module so it can be tested and cached independently.
 Keyless, free, monthly since 1973.
 """
 from __future__ import annotations

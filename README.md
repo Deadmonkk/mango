@@ -4,7 +4,7 @@
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
 
-A financial-research toolkit for collecting market, credit, and crypto data from free public sources, putting raw numbers in historical context, and grading its own predictions. It runs as an MCP server exposing 88 tools to Claude Code. 66 modules, 575 tests, approximately 13,500 lines of code. Standalone — no host project, no patch to apply.
+A financial-research toolkit for collecting market, credit, and crypto data from free public sources, putting raw numbers in historical context, and grading its own predictions. It runs as an MCP server exposing 88 tools to Claude Code. Free data sources, no required API keys.
 
 ## What it does
 
@@ -70,7 +70,7 @@ Verify it came up:
 uv run python -m mango   # logs: "Mango MCP server starting with 88 tools"
 ```
 
-The repo also ships 6 skills and 12 slash commands under `skills/` and `commands/`.
+The repo also ships 6 Claude Code skills under `skills/`.
 
 ## API keys
 
@@ -203,42 +203,16 @@ corrupts both.
 `git pull` and restart. Upgrades touch code only — there is no step where
 updating Mango writes to, moves, or deletes anything under `MANGO_HOME`.
 
-If you used this project before it was renamed, a `~/.terminalq` directory is
-**copied** to the new location on first run. The original is left exactly where
-it is, and if the new location already has data the migration refuses and tells
-you, rather than guessing which prediction ledger is the current one.
+## Contributing: secret scanning
 
-## Secret scanning (required after cloning)
-
-Two git hooks gate secrets before they can reach GitHub. They live in
-`.githooks/` and are versioned, but git does not enable hooks automatically —
-each clone must opt in once:
+Optional git hooks in `.githooks/` run [gitleaks](https://github.com/gitleaks/gitleaks) before every commit and push. Enable them once per clone:
 
 ```bash
 brew install gitleaks
 git config core.hooksPath .githooks
 ```
 
-- **pre-commit** scans the staged diff (fast, every commit).
-- **pre-push** scans full history — it catches anything that entered via
-  `--no-verify`, a rebase, or a commit predating the hooks.
-
-Both **fail closed**: if gitleaks is missing, the operation is refused rather
-than silently skipped. Findings print redacted, so the hook output never
-becomes a second copy of the secret.
-
-`.gitleaks.toml` extends the upstream ruleset with path rules for this
-project's private data (holdings, watchlist, prediction ledger, FR/EOD
-artifacts). Those files contain nothing a pattern scanner would recognise as a
-secret, so they are blocked by filename — the failure mode that actually
-happens is a copy landing where `.gitignore` does not reach.
-
-Test placeholders are allowlisted by **value** (`test_key_[0-9]+`), never by
-file: allowlisting a whole test file would stop a real key pasted into it from
-being caught, and test files are where that happens.
-
-If a secret ever does reach the remote, rotate it first — deleting the commit
-does not un-publish it.
+They fail closed: if gitleaks is missing, the commit or push is refused. If a secret ever reaches the remote, rotate it first — deleting the commit does not un-publish it.
 
 ## Running tests
 
@@ -249,7 +223,7 @@ uv sync --extra dev
 uv run pytest
 ```
 
-Expected: **575 pass, 7 skip.** The 7 skips are integration tests for a host project that no longer exists; they skip by design rather than fail. All network calls are faked, so tests run offline and consistently.
+All network calls are faked, so tests run offline and consistently. A few report-rendering tests skip unless you have saved reports locally.
 
 Running `uv run pytest` without the extra does not fail cleanly — pytest resolves from outside the project environment and collection dies on a missing `mcp` import, which looks like a broken dependency rather than a missing dev tool.
 
@@ -305,8 +279,6 @@ Each layer is independently testable. Providers return `{"error": ...}` payloads
 - The web scrapers use regex pattern matching instead of a proper HTML parser. It works, avoids adding a dependency, and is the kind of shortcut worth complaining about.
 - One file, `src/mango/providers/_html.py`, has no tests of its own, and four scrapers depend on it. The weakest spot in test coverage.
 - A couple of modules (`providers/reports.py`, `backfill.py`) only make full sense in the context of the complete FR workflow. Read in isolation, they'll look sparse.
-- The repo directory and the local data directory (`~/.terminalq/`) still carry the old project's name. Cosmetic, but they outlived the thing they were named after.
-- `wiring/` is kept as a record of how Mango integrated with its former host. Nothing in the install path touches it.
 
 ## How this was built
 
@@ -316,9 +288,7 @@ The most useful lesson came from the first time I deployed: the code worked perf
 
 Neither I nor the AI caught it. We were both looking at my environment, where everything was already in place.
 
-The tests caught it. Which is why there are 575 of them, why they run offline on a clean machine every time, and why they run automatically on GitHub Actions on each commit.
-
-The same lesson recurred when Mango was cut loose from its host: the server was configured, the config was correct, and it still could not start — `mcp` had only ever been a development dependency, and nothing had run the exact configured command. Verifying the thing you actually ship, not a close relative of it, is the whole discipline.
+The tests caught it. Which is why there are hundreds of them, why they run offline on a clean machine every time, and why they run automatically on GitHub Actions on each commit.
 
 ## License
 

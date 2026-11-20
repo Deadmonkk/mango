@@ -39,7 +39,7 @@ BASE_URL = "https://api.stlouisfed.org/fred"
 # constant elsewhere in the codebase (see tests/test_release_calendar.py).
 # Load ~/.env before resolving the key. Without this the key is found only when
 # some other module happened to load the dotfile first — which is import-order
-# luck inside a host project, and simply broken standalone.
+# luck.
 load_env()
 FRED_API_KEY: str = os.environ.get("FRED_API_KEY", "")
 

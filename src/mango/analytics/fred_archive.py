@@ -12,7 +12,7 @@ Wayback Machine snapshot of BAMLH0A0HYM2's full 1996-2025 history (cached
 (2026-04-22) was already post-restriction, so their pre-2023 history
 appears genuinely unrecoverable from any free source checked so far.
 
-Checked ALL 78 FRED series TerminalQ tracks on 2026-07-06: only these 5
+Checked ALL 78 FRED series Mango tracks on 2026-07-06: only these 5
 (all ICE-licensed) were restricted; the other 73 (BLS/BEA/Federal
 Reserve/Treasury-published series — CPI, GDP, unemployment, claims,
 yields, Fed balance sheet, forex, etc.) have full native history with no

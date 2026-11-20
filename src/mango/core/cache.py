@@ -42,9 +42,8 @@ from mango.core.logging import log
 DEFAULT_TTL_SECONDS = 60
 
 # Fallback cache directory when CACHE_DIR is not set in the environment.
-# This deliberately does NOT match the host project's repo-relative
-# `data/cache` — a standalone extension package should not write inside its
-# own source tree, and `~/.mango/` is already where this tool keeps user
+# Deliberately not inside the repo: a package should not write inside its
+# own source tree, and `~/.mango/` is where this tool keeps user
 # data (e.g. `~/.mango/history/`). Both caches coexist during the
 # transition; the worst case of the split is a value being fetched twice.
 DEFAULT_CACHE_DIR = paths.home() / paths.CACHE_SUBDIR

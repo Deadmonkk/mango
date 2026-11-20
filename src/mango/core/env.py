@@ -4,9 +4,8 @@ WHY THIS EXISTS
 ---------------
 Keys live in ``~/.env``. Nothing in this package read that file, so a module
 resolving ``FRED_API_KEY`` at import saw it only if some *other* module had
-already loaded the dotfile as a side effect. That worked by accident of import
-order inside the host project and failed outright standalone: on 2026-08-06 the
-owned FRED client returned "FRED_API_KEY not configured" against a live, healthy
+already loaded the dotfile as a side effect. That worked only by accident of import
+order, and failed otherwise: the FRED client once returned "FRED_API_KEY not configured" against a live, healthy
 API purely because nothing had loaded the file yet.
 
 Credential loading is therefore explicit and owned, not inherited.

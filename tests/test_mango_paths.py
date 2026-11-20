@@ -25,7 +25,6 @@ def _isolate(monkeypatch, tmp_path):
         "MANGO_HISTORY_DIR", "MANGO_PORTFOLIO_DIR", "CACHE_DIR", "PORTFOLIO_DIR",
     ):
         monkeypatch.delenv(var, raising=False)
-    monkeypatch.setattr(paths, "LEGACY_HOME", tmp_path / "nonexistent-legacy")
     monkeypatch.setattr(paths, "DEFAULT_HOME", tmp_path / "default-home")
 
 
@@ -95,77 +94,6 @@ def test_ensure_dirs_is_idempotent_and_leaves_existing_content_alone(monkeypatch
 
     assert paths.ensure_dirs() == []            # nothing new to create
     assert ledger.read_text() == '{"claim": "keep me"}\n'
-
-
-# --- migration --------------------------------------------------------------
-
-
-def test_migration_copies_legacy_data_without_moving_it(monkeypatch, tmp_path):
-    legacy = tmp_path / "legacy"
-    (legacy / "history").mkdir(parents=True)
-    (legacy / "history" / "predictions.jsonl").write_text('{"claim": "original"}\n')
-    (legacy / "watchlist.md").write_text("# Watchlist\n")
-
-    home = tmp_path / "new-home"
-    monkeypatch.setattr(paths, "LEGACY_HOME", legacy)
-    monkeypatch.setenv("MANGO_HOME", str(home))
-
-    result = paths.migrate_legacy_home()
-
-    assert result["migrated"] is True
-    assert (home / "history" / "predictions.jsonl").read_text() == '{"claim": "original"}\n'
-    assert (home / "watchlist.md").exists()
-    # Copied, never moved: if the new location is wrong, the original survives.
-    assert (legacy / "history" / "predictions.jsonl").exists()
-
-
-def test_migration_refuses_when_destination_already_has_data(monkeypatch, tmp_path):
-    """The guarantee that matters most.
-
-    Merging two populated directories could overwrite a current prediction
-    ledger with a stale one, and nothing in the filesystem says which is
-    authoritative. Refusing is the only safe automatic answer.
-    """
-    legacy = tmp_path / "legacy"
-    (legacy / "history").mkdir(parents=True)
-    (legacy / "history" / "predictions.jsonl").write_text('{"claim": "OLD"}\n')
-
-    home = tmp_path / "home-with-data"
-    (home / "history").mkdir(parents=True)
-    current = home / "history" / "predictions.jsonl"
-    current.write_text('{"claim": "CURRENT"}\n')
-
-    monkeypatch.setattr(paths, "LEGACY_HOME", legacy)
-    monkeypatch.setenv("MANGO_HOME", str(home))
-
-    result = paths.migrate_legacy_home()
-
-    assert result["migrated"] is False
-    assert result["reason"] == "destination not empty"
-    assert current.read_text() == '{"claim": "CURRENT"}\n'   # untouched
-    assert (legacy / "history" / "predictions.jsonl").exists()  # also untouched
-
-
-def test_migration_is_a_no_op_without_a_legacy_directory(monkeypatch, tmp_path):
-    monkeypatch.setattr(paths, "LEGACY_HOME", tmp_path / "not-there")
-    monkeypatch.setenv("MANGO_HOME", str(tmp_path / "home"))
-
-    assert paths.migrate_legacy_home()["migrated"] is False
-
-
-def test_bootstrap_migrates_then_creates(monkeypatch, tmp_path):
-    legacy = tmp_path / "legacy"
-    legacy.mkdir()
-    (legacy / "watchlist.md").write_text("# Watchlist\n")
-    home = tmp_path / "home"
-    monkeypatch.setattr(paths, "LEGACY_HOME", legacy)
-    monkeypatch.setenv("MANGO_HOME", str(home))
-
-    state = paths.bootstrap()
-
-    assert state["migration"]["migrated"] is True
-    assert (home / "watchlist.md").exists()      # migrated content survives
-    assert (home / "cache").is_dir()             # and the rest is filled in
 
 
 # --- the repo itself --------------------------------------------------------

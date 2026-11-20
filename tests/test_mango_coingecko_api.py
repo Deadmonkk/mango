@@ -5,7 +5,7 @@ this module imports from ``mango.core.coingecko``); no test touches the
 network. AAA structure throughout.
 
 Reference shapes are drawn from real saved FR-report payloads
-(``~/Desktop/market-reports/.briefs/fr_raw_*.json``), not memory — see
+(saved ``fr_raw_*.json`` collector payloads), not memory — see
 the module docstring in ``mango/providers/coingecko.py`` for exactly which
 keys were used.
 """

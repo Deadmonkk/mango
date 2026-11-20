@@ -44,7 +44,6 @@ live cache. The helpers here are called once, at import, on purpose.
 from __future__ import annotations
 
 import os
-import shutil
 from pathlib import Path
 
 from mango.core.logging import get_logger
@@ -53,10 +52,6 @@ log = get_logger("paths")
 
 HOME_ENV_VAR = "MANGO_HOME"
 DEFAULT_HOME = Path.home() / ".mango"
-
-# The directory this project used before it was renamed. Retained only so a
-# pre-rename install can be migrated; nothing else should reference it.
-LEGACY_HOME = Path.home() / ".terminalq"
 
 # Subdirectory names under the home. Portfolio files live at the home root
 # rather than in a subdirectory — they are hand-edited, and asking someone to
@@ -150,49 +145,7 @@ def ensure_dirs() -> list[Path]:
     return created
 
 
-def migrate_legacy_home() -> dict:
-    """Copy a pre-rename ``~/.terminalq`` into the current home, if safe.
-
-    Non-destructive in both directions, which is the whole contract:
-
-    - The source is **copied, never moved**. If anything about the new location
-      is wrong, the original is still sitting there untouched.
-    - It refuses to run if the destination already holds data. Merging two
-      partially-populated directories risks silently overwriting a prediction
-      ledger with an older one, and no automatic rule can tell which is
-      authoritative. A human must decide that.
-
-    Returns a summary dict rather than raising: a failed migration must not
-    stop the server from starting, it must be reported.
-    """
-    destination = home()
-
-    if not LEGACY_HOME.exists():
-        return {"migrated": False, "reason": "no legacy directory"}
-
-    if LEGACY_HOME.resolve() == destination.resolve():
-        return {"migrated": False, "reason": "legacy and current home are the same path"}
-
-    if destination.exists() and any(destination.iterdir()):
-        log.warning(
-            "found legacy data at %s but %s already has data; leaving both alone. "
-            "Merge by hand if the legacy copy is the one you want.",
-            LEGACY_HOME, destination,
-        )
-        return {"migrated": False, "reason": "destination not empty", "legacy": str(LEGACY_HOME)}
-
-    try:
-        shutil.copytree(LEGACY_HOME, destination, dirs_exist_ok=False)
-        destination.chmod(DIR_MODE)
-        log.info("migrated data from %s to %s (original left in place)", LEGACY_HOME, destination)
-        return {"migrated": True, "source": str(LEGACY_HOME), "destination": str(destination)}
-    except OSError as exc:
-        log.warning("could not migrate %s to %s: %s", LEGACY_HOME, destination, exc)
-        return {"migrated": False, "reason": str(exc)}
-
-
 def bootstrap() -> dict:
     """Prepare the data directory for use. Safe to call on every start."""
-    migration = migrate_legacy_home()
     created = ensure_dirs()
-    return {"home": str(home()), "created": [str(p) for p in created], "migration": migration}
+    return {"home": str(home()), "created": [str(p) for p in created]}

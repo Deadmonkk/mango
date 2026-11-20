@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import sys
+import os
 from pathlib import Path
 
 import pytest
@@ -38,7 +39,7 @@ from fr_sections import render_digest  # noqa: E402
 @pytest.fixture(scope="module")
 def payload() -> tuple[dict, dict]:
     """A real captured EOD collector payload, if one is present on this machine."""
-    briefs = Path.home() / "Desktop/market-reports/.briefs"
+    briefs = Path(os.environ.get("FR_BRIEF_DIR") or Path(os.environ.get("MANGO_REPORTS_DIR", "~/market-reports")).expanduser() / ".briefs")
     files = sorted(briefs.glob("eod_raw_*.json")) if briefs.exists() else []
     if not files:
         pytest.skip("no captured eod_raw_*.json available")

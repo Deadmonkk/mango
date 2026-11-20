@@ -53,6 +53,4 @@ paths = [
   '''src/mango/core/redact\.py''',
   '''tests/test_mango_redact\.py''',
   '''tests/test_mango_logging\.py''',
-  # Historical record of the host-era integration; audited, no live values.
-  '''wiring/upstream-wiring\.patch''',
 ]

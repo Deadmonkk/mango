@@ -27,11 +27,11 @@ that says how much the distinction matters for that name. Prefer the median.
 
 USAGE
 -----
-    uv run --directory /path/to/terminalq python scripts/adv.py AAPL MSFT NVDA
-    uv run --directory /path/to/terminalq python scripts/adv.py NVDA --period 6mo
-    uv run --directory /path/to/terminalq python scripts/adv.py MSFT --flow 1.0e9
-    uv run --directory /path/to/terminalq python scripts/adv.py --watchlist
-    uv run --directory /path/to/terminalq python scripts/adv.py AAPL --json
+    uv run --directory /path/to/mango python scripts/adv.py AAPL MSFT NVDA
+    uv run --directory /path/to/mango python scripts/adv.py NVDA --period 6mo
+    uv run --directory /path/to/mango python scripts/adv.py MSFT --flow 1.0e9
+    uv run --directory /path/to/mango python scripts/adv.py --watchlist
+    uv run --directory /path/to/mango python scripts/adv.py AAPL --json
 
 --flow sizes a dollar flow against each ticker's ADV, reporting both the
 multiple and the days-of-volume, computed on the MEDIAN (the conservative read).
