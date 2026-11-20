@@ -2,7 +2,7 @@
 
 [![tests](https://github.com/Deadmonkk/mango/actions/workflows/tests.yml/badge.svg)](https://github.com/Deadmonkk/mango/actions/workflows/tests.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
+[![python 3.11.5+](https://img.shields.io/badge/python-3.11.5%2B-blue.svg)](https://www.python.org/)
 
 A financial-research toolkit for collecting market, credit, and crypto data from free public sources, putting raw numbers in historical context, and grading its own predictions. It runs as an MCP server exposing 88 tools to Claude Code. Free data sources, no required API keys.
 
@@ -32,7 +32,7 @@ Four lessons learned the hard way, now embedded as rules:
 
 ## Installing
 
-Mango needs **Python 3.11+** and [uv](https://docs.astral.sh/uv/). If you don't
+Mango needs **Python 3.11.5+** and [uv](https://docs.astral.sh/uv/). If you don't
 have uv:
 
 ```bash

@@ -4,7 +4,7 @@
 name = "mango"
 version = "0.1.0"
 description = "Free-data market providers, historical-context analytics, deterministic report rendering, and a self-grading prediction ledger"
-requires-python = ">=3.11"
+requires-python = ">=3.11.5"
 dependencies = [
     # Mango ships an MCP server, so this is a runtime dependency, not a dev one.
     # Upper bound is load-bearing: 2.x moved mcp.server.fastmcp, which the server
